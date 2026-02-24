@@ -1,0 +1,36 @@
+# OS / tooling
+.DS_Store
+Thumbs.db
+
+# Logs
+**/Logs/
+**/*.log
+
+# Node / Vite
+**/node_modules/
+**/dist/
+**/.vite/
+**/.eslintcache
+
+# .NET
+**/bin/
+**/obj/
+**/*.user
+**/*.suo
+**/*.cache
+**/*.pdb
+**/*.mdb
+**/*.dbmdl
+**/*.jfm
+**/*.rsuser
+
+# Local configs / secrets
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/.env
+**/.env.*
+
+# IDE
+.idea/
+.vscode/
+

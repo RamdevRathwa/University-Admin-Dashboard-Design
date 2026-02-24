@@ -1,0 +1,61 @@
+const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "http://localhost:5080").replace(/\/+$/, "");
+
+async function request(path, { method = "GET", body, token } = {}) {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+
+  if (!res.ok) {
+    const msg = data?.title || data?.message || `Request failed (${res.status})`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.code = data?.code;
+    err.traceId = data?.traceId;
+    throw err;
+  }
+
+  return data;
+}
+
+export const authService = {
+  async requestRegistrationOtp({ fullName, email, mobile }) {
+    return request("/api/Auth/register/request-otp", {
+      method: "POST",
+      body: { fullName, email, mobile },
+    });
+  },
+
+  async verifyRegistration({ fullName, email, mobile, emailOtp, mobileOtp }) {
+    return request("/api/Auth/register/verify", {
+      method: "POST",
+      body: { fullName, email, mobile, emailOtp, mobileOtp },
+    });
+  },
+
+  async requestLoginOtp(identifier) {
+    return request("/api/Auth/login/request-otp", {
+      method: "POST",
+      body: { identifier },
+    });
+  },
+
+  async verifyLogin({ identifier, otp, role }) {
+    return request("/api/Auth/login/verify", {
+      method: "POST",
+      body: { identifier, otp, role },
+    });
+  },
+
+  async me(token) {
+    return request("/api/Auth/me", { token });
+  },
+};
+
