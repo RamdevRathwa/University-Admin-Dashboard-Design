@@ -1,4 +1,5 @@
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "http://localhost:5080").replace(/\/+$/, "");
+const RAW_BASE_URL = import.meta.env?.VITE_API_BASE_URL;
+const API_BASE_URL = (RAW_BASE_URL ? String(RAW_BASE_URL) : "").replace(/\/+$/, "");
 
 function getAuthTokenFromStorage() {
   const rememberAuth = localStorage.getItem("rememberAuth") === "true";
@@ -31,4 +32,3 @@ export async function apiRequest(path, { method = "GET", body, token } = {}) {
 
   return data;
 }
-

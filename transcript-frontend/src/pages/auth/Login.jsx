@@ -9,7 +9,6 @@ import { Label } from "../../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import { Alert } from "../../components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
 const isValidMobile = (mobile) => /^\d{10}$/.test(String(mobile || "").trim());
@@ -27,10 +26,9 @@ const roleHomePath = (role) => {
 
 export default function Login() {
   const navigate = useNavigate();
-  const { isAuthenticated, userRole, requestLoginOtp, loginWithOtp, devLoginAs } = useAuth();
+  const { isAuthenticated, userRole, requestLoginOtp, loginWithOtp } = useAuth();
 
   const [method, setMethod] = useState("email"); // 'email' | 'mobile'
-  const [role, setRole] = useState("Student");
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -69,12 +67,6 @@ export default function Login() {
   };
 
   const handleSendOtp = async () => {
-    // Temporary dev-only bypass for staff roles until those accounts exist.
-    if (import.meta.env.DEV && role !== "Student") {
-      const res = devLoginAs?.(role, rememberMe);
-      if (res?.success) navigate(roleHomePath(res.role), { replace: true });
-      return;
-    }
     if (!validateIdentifier()) return;
     setLoading(true);
     const res = await requestLoginOtp(String(identifier).trim());
@@ -94,9 +86,9 @@ export default function Login() {
     if (!validateIdentifier()) return;
     if (!validateOtp()) return;
     setLoading(true);
-    const res = await loginWithOtp(String(identifier).trim(), otp, rememberMe, role);
+    const res = await loginWithOtp(String(identifier).trim(), otp, rememberMe);
     setLoading(false);
-    if (res?.success) navigate(roleHomePath(res?.role || role), { replace: true });
+    if (res?.success) navigate(roleHomePath(res?.role), { replace: true });
     else setErrors({ otp: res?.message || "Invalid OTP" });
   };
 
@@ -130,28 +122,6 @@ export default function Login() {
             <TabsContent value={method}>
               <form onSubmit={handleVerify} className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Role</Label>
-                  <Select
-                    value={role}
-                    onValueChange={(v) => {
-                      setRole(v);
-                    }}
-                    disabled={otpSent || loading}
-                  >
-                    <SelectTrigger aria-label="Select role">
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Student">Student</SelectItem>
-                      <SelectItem value="Clerk">Clerk</SelectItem>
-                      <SelectItem value="HoD">HoD</SelectItem>
-                      <SelectItem value="Dean">Dean</SelectItem>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="identifier">{method === "email" ? "Email" : "Mobile Number"}</Label>
                   <Input
                     id="identifier"
@@ -162,7 +132,7 @@ export default function Login() {
                       if (errors.identifier) setErrors((p) => ({ ...p, identifier: null }));
                     }}
                     placeholder={method === "email" ? "Enter your email" : "Enter 10-digit mobile number"}
-                    disabled={otpSent || (import.meta.env.DEV && role !== "Student")}
+                    disabled={otpSent}
                     aria-invalid={!!errors.identifier}
                   />
                   {errors.identifier ? <p className="text-xs text-red-600">{errors.identifier}</p> : null}
@@ -170,11 +140,7 @@ export default function Login() {
 
                 {!otpSent ? (
                   <Button type="button" className="w-full" disabled={loading} onClick={handleSendOtp}>
-                    {import.meta.env.DEV && role !== "Student"
-                      ? `Continue as ${role}`
-                      : loading
-                      ? "Sending OTP..."
-                      : "Send OTP"}
+                    {loading ? "Sending OTP..." : "Send OTP"}
                   </Button>
                 ) : (
                   <>

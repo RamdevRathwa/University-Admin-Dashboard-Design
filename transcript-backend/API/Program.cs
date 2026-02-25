@@ -41,13 +41,25 @@ builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("frontend", p =>
+    {
+        // Dev convenience: allow any origin to prevent "NetworkError" when the Vite origin differs
+        // (127.0.0.1 vs localhost vs LAN IP). Avoid credentials so AllowAnyOrigin is valid.
+        if (builder.Environment.IsDevelopment())
+        {
+            p.AllowAnyOrigin()
+             .AllowAnyHeader()
+             .AllowAnyMethod();
+            return;
+        }
+
         p.AllowAnyHeader()
          .AllowAnyMethod()
          .AllowCredentials()
          .WithOrigins(
              "http://localhost:5173",
              "http://127.0.0.1:5173"
-         ));
+         );
+    });
 });
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -84,7 +96,10 @@ app.UseSerilogRequestLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("frontend");
 
 app.UseAuthentication();

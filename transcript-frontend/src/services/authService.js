@@ -1,7 +1,9 @@
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "http://localhost:5080").replace(/\/+$/, "");
+const RAW_BASE_URL = import.meta.env?.VITE_API_BASE_URL;
+const API_BASE_URL = (RAW_BASE_URL ? String(RAW_BASE_URL) : "").replace(/\/+$/, "");
 
 async function request(path, { method = "GET", body, token } = {}) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const url = `${API_BASE_URL}${path}`;
+  const res = await fetch(url, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -47,10 +49,10 @@ export const authService = {
     });
   },
 
-  async verifyLogin({ identifier, otp, role }) {
+  async verifyLogin({ identifier, otp }) {
     return request("/api/Auth/login/verify", {
       method: "POST",
-      body: { identifier, otp, role },
+      body: { identifier, otp },
     });
   },
 
@@ -58,4 +60,3 @@ export const authService = {
     return request("/api/Auth/me", { token });
   },
 };
-

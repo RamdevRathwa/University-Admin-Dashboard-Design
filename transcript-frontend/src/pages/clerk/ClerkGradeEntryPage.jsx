@@ -10,80 +10,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { getEarnedGradePoints, getGradePoint, getOutOfPoints } from "../../components/clerk/grade-entry/gradeUtils";
 import { clerkGradeEntryService } from "../../services/clerkGradeEntryService";
 
-function buildMockStudent(prn) {
-  return {
-    name: "David Bernardo",
-    prn: prn || "8022053249",
-    faculty: "Technology and Engineering",
-    department: "Computer Science and Engineering",
-    program: "BE-CSE",
-    admissionYear: "2022",
-    semester: "BE-I",
-    academicYear: "2025-26",
+function formatDob(dobValue) {
+  const raw = String(dobValue || "").trim();
+  if (!raw) return "";
 
-    nationality: "ANGOLANA",
-    dob: "22 April 2002",
-    birthPlace: "LUANDA",
-    permanentAddress: "LUANDA / VIANA, LUANDA",
-    degreeAwarded: "B. E. (Computer Science and Engineering)*",
-    joinedCourseIn: "July 2022",
-    courseDuration: "Four Years (Three Years in case of Diploma to Degree Students)",
-  };
-}
+  // Backend uses DateOnly => "YYYY-MM-DD"
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const y = Number(iso[1]);
+    const m = Number(iso[2]);
+    const d = Number(iso[3]);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    if (!Number.isNaN(dt.getTime())) {
+      return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
+    }
+  }
 
-function buildMockSemesters() {
-  return [
-    {
-      yearTitle: "BE-I (Computer Science and Engineering)   2022-2023",
-      termTitle: "First Semester (JUL 2022 - NOV 2022)",
-      creditPointScheme: 10,
-      subjects: [
-        { name: "Applied Physics - I", thHours: 4, prHours: 3, thCredits: 4, prCredits: 1.5 },
-        { name: "Applied Mathematics-I", thHours: 4, prHours: 0, thCredits: 4, prCredits: 0 },
-        { name: "Fundamentals of Civil and Environmental Engineering", thHours: 4, prHours: 2, thCredits: 4, prCredits: 1 },
-        { name: "Engineering Drawing-I", thHours: 4, prHours: 2, thCredits: 4, prCredits: 1 },
-        { name: "Workshop Practices", thHours: 0, prHours: 2, thCredits: 0, prCredits: 1 },
-        { name: "Material Science", thHours: 4, prHours: 0, thCredits: 4, prCredits: 0 },
-      ],
-    },
-    {
-      yearTitle: "BE-I (Computer Science and Engineering)   2022-2023",
-      termTitle: "Second Semester (DEC 2022 - MAY 2023)",
-      creditPointScheme: 10,
-      subjects: [
-        { name: "Applied Physics - II", thHours: 4, prHours: 2, thCredits: 4, prCredits: 1 },
-        { name: "Applied Mathematics-II", thHours: 4, prHours: 0, thCredits: 4, prCredits: 0 },
-        { name: "Basic Electrical Engineering", thHours: 4, prHours: 2, thCredits: 4, prCredits: 1 },
-        { name: "Programming for Problem Solving", thHours: 3, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Workshop Practices-II", thHours: 0, prHours: 2, thCredits: 0, prCredits: 1 },
-        { name: "Environmental Studies", thHours: 3, prHours: 0, thCredits: 3, prCredits: 0 },
-      ],
-    },
-    {
-      yearTitle: "BE-II (Computer Science and Engineering)   2023-2024",
-      termTitle: "Third Semester (JUL 2023 - NOV 2023)",
-      creditPointScheme: 10,
-      subjects: [
-        { name: "Data Structures", thHours: 3, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Discrete Mathematics", thHours: 4, prHours: 0, thCredits: 4, prCredits: 0 },
-        { name: "Digital Logic Design", thHours: 3, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Object Oriented Programming", thHours: 3, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Professional Communication", thHours: 2, prHours: 0, thCredits: 2, prCredits: 0 },
-      ],
-    },
-    {
-      yearTitle: "BE-II (Computer Science and Engineering)   2023-2024",
-      termTitle: "Fourth Semester (DEC 2023 - MAY 2024)",
-      creditPointScheme: 10,
-      subjects: [
-        { name: "Operating Systems", thHours: 4, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Design and Analysis of Algorithms", thHours: 4, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Database Systems", thHours: 4, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Computer Networks", thHours: 4, prHours: 2, thCredits: 3, prCredits: 1 },
-        { name: "Software Engineering", thHours: 4, prHours: 0, thCredits: 3, prCredits: 0 },
-      ],
-    },
-  ];
+  // If already formatted (e.g. "22 April 2002"), keep it.
+  return raw;
 }
 
 export default function ClerkGradeEntryPage() {
@@ -113,24 +57,29 @@ export default function ClerkGradeEntryPage() {
       const s = res?.student || res?.Student;
       const sems = res?.semesters || res?.Semesters || [];
 
-      const mappedStudent = s
-        ? {
-            name: s.fullName || s.FullName || "",
-            prn: s.prn || s.PRN || p,
-            faculty: s.faculty || s.Faculty || "",
-            department: s.department || s.Department || "",
-            program: s.program || s.Program || "",
-            admissionYear: s.admissionYear ?? s.AdmissionYear ?? "",
-            graduationYear: s.graduationYear ?? s.GraduationYear ?? "",
-            nationality: s.nationality || s.Nationality || "",
-            dob: s.dob || s.DOB || "",
-            birthPlace: s.birthPlace || s.BirthPlace || "",
-            permanentAddress: s.address || s.Address || "",
-            degreeAwarded: s.program ? `${s.program}*` : "",
-            joinedCourseIn: s.admissionYear ? `July ${s.admissionYear}` : "",
-            courseDuration: "Four Years (Three Years in case of Diploma to Degree Students)",
-          }
-        : buildMockStudent(p);
+      if (!s) {
+        throw new Error("Student profile not found for this PRN.");
+      }
+
+      const fullName = s.fullName || s.FullName || "";
+      const program = s.program || s.Program || "";
+      const admissionYear = s.admissionYear ?? s.AdmissionYear ?? "";
+      const mappedStudent = {
+        name: fullName,
+        prn: s.prn || s.PRN || p,
+        faculty: s.faculty || s.Faculty || "",
+        department: s.department || s.Department || "",
+        program,
+        admissionYear,
+        graduationYear: s.graduationYear ?? s.GraduationYear ?? "",
+        nationality: s.nationality || s.Nationality || "",
+        dob: formatDob(s.dob || s.DOB || ""),
+        birthPlace: s.birthPlace || s.BirthPlace || "",
+        permanentAddress: s.address || s.Address || "",
+        degreeAwarded: program ? `${program}*` : "",
+        joinedCourseIn: admissionYear ? `July ${admissionYear}` : "",
+        courseDuration: "Four Years (Three Years in case of Diploma to Degree Students)",
+      };
 
       const mappedSemesters = (sems || []).map((sem) => ({
         yearTitle: sem.yearTitle || sem.YearTitle || "",
@@ -259,7 +208,7 @@ export default function ClerkGradeEntryPage() {
               setPrn(v);
               if (errors) setErrors("");
             }}
-            placeholder="Search by PRN (e.g. 8022053249)"
+            placeholder="Search by PRN (e.g. 0822053249)"
             ariaLabel="Search by PRN"
             rightSlot={
               <Button type="button" onClick={loadByPrn} disabled={loading}>

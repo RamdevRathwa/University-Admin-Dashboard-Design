@@ -91,7 +91,6 @@ public sealed class AuthService : IAuthService
             : await _users.GetByMobileAsync(otpIdentifier, ct);
 
         if (user is null) throw AppException.NotFound("Account not found. Please register first.");
-        if (user.Role != dto.Role) throw AppException.Forbidden("Role mismatch for this account.");
 
         var purpose = isEmail ? OtpPurpose.LoginEmail : OtpPurpose.LoginMobile;
         await _otp.VerifyOtpAsync(otpIdentifier, purpose, dto.Otp, ct);

@@ -86,8 +86,8 @@ export const AuthProvider = ({ children }) => {
 
   const loginWithOtp = async (identifier, otp, rememberAuth = false, roleOverride = null) => {
     try {
-      const response = await authService.verifyLogin({ identifier, otp, role: roleOverride || "Student" });
-      const effectiveRole = roleOverride || response?.user?.role || "Student";
+      const response = await authService.verifyLogin({ identifier, otp });
+      const effectiveRole = response?.user?.role || "Student";
       writeAuthToStorage({
         token: response?.token,
         role: effectiveRole,
