@@ -240,7 +240,7 @@ export default function ClerkGradeEntryPage() {
       </div>
 
       <Card>
-        <CardContent className="p-5">
+        <CardContent className="p-4">
           <SearchBar
             value={prn}
             onChange={(v) => {
@@ -250,7 +250,7 @@ export default function ClerkGradeEntryPage() {
             placeholder="Search by PRN (e.g. 0822053249)"
             ariaLabel="Search by PRN"
             rightSlot={
-              <Button type="button" onClick={loadByPrn} disabled={loading}>
+              <Button type="button" onClick={loadByPrn} disabled={loading} className="px-6">
                 {loading ? "Loading..." : "Fetch"}
               </Button>
             }
