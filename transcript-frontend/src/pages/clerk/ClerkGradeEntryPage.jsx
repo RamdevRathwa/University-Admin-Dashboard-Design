@@ -240,7 +240,7 @@ export default function ClerkGradeEntryPage() {
       </div>
 
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 pt-4">
           <SearchBar
             value={prn}
             onChange={(v) => {
