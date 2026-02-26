@@ -73,7 +73,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
                     gradeMap.TryGetValue(s.Id, out var ge);
                     return new GradeEntrySubjectDto(
                         s.Id,
-                        s.SubjectCode,
+                        (s.SubjectCode ?? string.Empty).Trim(),
                         s.SubjectName,
                         s.ThHours,
                         s.PrHours,

@@ -7,7 +7,7 @@ public sealed class CurriculumSubject
     public string Program { get; set; } = string.Empty;
     public int SemesterNumber { get; set; }
 
-    public string SubjectCode { get; set; } = string.Empty;
+    public string? SubjectCode { get; set; }
     public string SubjectName { get; set; } = string.Empty;
 
     public decimal ThHours { get; set; }
@@ -18,4 +18,3 @@ public sealed class CurriculumSubject
     public int CreditPointScheme { get; set; } = 10;
     public bool IsActive { get; set; } = true;
 }
-

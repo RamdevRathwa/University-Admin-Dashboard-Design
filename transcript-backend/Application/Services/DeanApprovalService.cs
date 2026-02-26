@@ -97,8 +97,10 @@ public sealed class DeanApprovalService : IDeanApprovalService
             geMap.TryGetValue(s.Id, out var ge);
             var th = (ge?.ThGrade ?? string.Empty).Trim();
             var pr = (ge?.PrGrade ?? string.Empty).Trim();
-            if (GradeCalc.IsGradeMissing(th, s.ThCredits)) throw new AppException($"Missing TH grade for {s.SubjectCode}.", 400, "grade_missing");
-            if (GradeCalc.IsGradeMissing(pr, s.PrCredits)) throw new AppException($"Missing PR grade for {s.SubjectCode}.", 400, "grade_missing");
+            var code = (s.SubjectCode ?? string.Empty).Trim();
+            var label = string.IsNullOrWhiteSpace(code) ? s.SubjectName : code;
+            if (GradeCalc.IsGradeMissing(th, s.ThCredits)) throw new AppException($"Missing TH grade for {label}.", 400, "grade_missing");
+            if (GradeCalc.IsGradeMissing(pr, s.PrCredits)) throw new AppException($"Missing PR grade for {label}.", 400, "grade_missing");
         }
 
         var transcript = new Transcript
@@ -151,7 +153,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
                         TranscriptSemesterSnapshotId = sem.Id,
                         SN = sn++,
                         SubjectName = s.SubjectName,
-                        SubjectCode = s.SubjectCode,
+                        SubjectCode = (s.SubjectCode ?? string.Empty).Trim(),
                         ThHours = s.ThHours,
                         PrHours = s.PrHours,
                         ThCredits = s.ThCredits,
@@ -324,7 +326,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
                     gradeMap.TryGetValue(s.Id, out var ge);
                     return new GradeEntrySubjectDto(
                         s.Id,
-                        s.SubjectCode,
+                        (s.SubjectCode ?? string.Empty).Trim(),
                         s.SubjectName,
                         s.ThHours,
                         s.PrHours,
