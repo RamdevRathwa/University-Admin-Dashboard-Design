@@ -2,24 +2,37 @@ using Application.Common;
 using Application.DTOs.Clerk.GradeEntry;
 using Application.Interfaces;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Interfaces;
 
 namespace Application.Services;
 
 public sealed class ClerkGradeEntryService : IClerkGradeEntryService
 {
+    private readonly ICurrentUserService _current;
     private readonly ICurriculumSubjectRepository _curriculum;
     private readonly IStudentGradeEntryRepository _grades;
     private readonly IStudentProfileRepository _profiles;
+    private readonly ITranscriptRequestRepository _requests;
+    private readonly IClerkWorkflowService _workflow;
+    private readonly IUnitOfWork _uow;
 
     public ClerkGradeEntryService(
+        ICurrentUserService current,
         IStudentProfileRepository profiles,
         ICurriculumSubjectRepository curriculum,
-        IStudentGradeEntryRepository grades)
+        IStudentGradeEntryRepository grades,
+        ITranscriptRequestRepository requests,
+        IClerkWorkflowService workflow,
+        IUnitOfWork uow)
     {
+        _current = current;
         _profiles = profiles;
         _curriculum = curriculum;
         _grades = grades;
+        _requests = requests;
+        _workflow = workflow;
+        _uow = uow;
     }
 
     public async Task<GradeEntryResponseDto> GetByPrnAsync(string prn, CancellationToken ct = default)
@@ -91,6 +104,107 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         return new GradeEntryResponseDto(studentDto, semesters);
     }
 
+    public async Task SaveDraftAsync(string prn, GradeEntrySaveDraftRequestDto dto, CancellationToken ct = default)
+    {
+        EnsureClerk();
+
+        var rawPrn = (prn ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(rawPrn)) throw new AppException("PRN is required.", 400, "prn_required");
+
+        var student = await _profiles.GetUserByPrnAsync(rawPrn, ct);
+        if (student is null) throw AppException.NotFound("Student not found for this PRN.");
+
+        var profile = student.StudentProfile!;
+        if (string.IsNullOrWhiteSpace(profile.Program))
+            throw new AppException("Student profile does not have Program set.", 400, "profile_program_missing");
+
+        var subjects = await _curriculum.GetByProgramAsync(profile.Program, ct);
+        if (subjects.Count == 0)
+            throw new AppException($"No curriculum found for program '{profile.Program}'.", 400, "curriculum_missing");
+
+        var allowedIds = subjects.Select(x => x.Id).ToHashSet();
+
+        foreach (var item in dto.Items ?? Array.Empty<GradeEntryUpsertDto>())
+        {
+            if (item.CurriculumSubjectId == Guid.Empty) continue;
+            if (!allowedIds.Contains(item.CurriculumSubjectId))
+                throw new AppException("One or more subjects are not part of this student's curriculum.", 400, "invalid_subject");
+
+            var th = (item.ThGrade ?? string.Empty).Trim();
+            var prg = (item.PrGrade ?? string.Empty).Trim();
+
+            var entry = new StudentGradeEntry
+            {
+                Id = Guid.NewGuid(),
+                StudentId = student.Id,
+                CurriculumSubjectId = item.CurriculumSubjectId,
+                ThGrade = th,
+                PrGrade = prg,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedBy = _current.UserId
+            };
+
+            await _grades.UpsertAsync(entry, ct);
+        }
+
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task SubmitToHoDAsync(string prn, GradeEntrySubmitRequestDto dto, CancellationToken ct = default)
+    {
+        EnsureClerk();
+
+        // Save grades first (server-side validation for missing grades happens below).
+        await SaveDraftAsync(prn, new GradeEntrySaveDraftRequestDto(dto.Items), ct);
+
+        var rawPrn = (prn ?? string.Empty).Trim();
+        var student = await _profiles.GetUserByPrnAsync(rawPrn, ct);
+        if (student is null) throw AppException.NotFound("Student not found for this PRN.");
+
+        var profile = student.StudentProfile!;
+        if (string.IsNullOrWhiteSpace(profile.Program))
+            throw new AppException("Student profile does not have Program set.", 400, "profile_program_missing");
+
+        // Ensure the clerk-stage submitted request exists.
+        var requests = await _requests.GetByStudentIdAsync(student.Id, ct);
+        var req = requests.FirstOrDefault(x => x.Status == TranscriptRequestStatus.Submitted && x.CurrentStage == TranscriptStage.Clerk);
+        if (req is null)
+        {
+            // Temporary safety net: allow clerk workflow testing even if the student request flow isn't wired yet.
+            // In the final flow, this should require the student to submit a request before clerk can forward it.
+            req = new TranscriptRequest
+            {
+                Id = Guid.NewGuid(),
+                StudentId = student.Id,
+                Status = TranscriptRequestStatus.Submitted,
+                CurrentStage = TranscriptStage.Clerk,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _requests.AddAsync(req, ct);
+            await _uow.SaveChangesAsync(ct);
+        }
+
+        // Validate that all required grade parts are filled before forwarding.
+        var subjects = await _curriculum.GetByProgramAsync(profile.Program, ct);
+        var subjectMap = subjects.ToDictionary(x => x.Id, x => x);
+
+        // Load latest grades (after upsert).
+        var gradeEntries = await _grades.GetByStudentIdAsync(student.Id, ct);
+        var gradeMap = gradeEntries.ToDictionary(x => x.CurriculumSubjectId, x => x);
+
+        foreach (var s in subjects)
+        {
+            gradeMap.TryGetValue(s.Id, out var ge);
+            var th = (ge?.ThGrade ?? string.Empty).Trim();
+            var prg = (ge?.PrGrade ?? string.Empty).Trim();
+
+            if (GradeCalc.IsGradeMissing(th, s.ThCredits) || GradeCalc.IsGradeMissing(prg, s.PrCredits))
+                throw new AppException("Please enter grades for all subjects (TH/PR) before submitting to HoD.", 400, "grades_incomplete");
+        }
+
+        await _workflow.ForwardToHoDAsync(req.Id, dto.Remarks, ct);
+    }
+
     private static string BuildYearTitle(string program, int? admissionYear, int semesterNumber)
     {
         // Sem 1-2 => BE-I, 3-4 => BE-II, etc.
@@ -117,5 +231,11 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var months = (semesterNumber % 2) == 1 ? "(JUL - NOV)" : "(DEC - MAY)";
         var ay = admissionYear.HasValue ? $"{admissionYear + ((semesterNumber - 1) / 2)}" : string.Empty;
         return string.IsNullOrWhiteSpace(ay) ? $"{term} {months}" : $"{term} {months} {ay}";
+    }
+
+    private void EnsureClerk()
+    {
+        if (!_current.IsAuthenticated) throw AppException.Unauthorized();
+        if (_current.Role != UserRole.Clerk && _current.Role != UserRole.Admin) throw AppException.Forbidden();
     }
 }

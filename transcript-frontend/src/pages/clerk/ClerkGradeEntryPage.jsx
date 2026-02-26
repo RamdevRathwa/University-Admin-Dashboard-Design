@@ -40,9 +40,11 @@ export default function ClerkGradeEntryPage() {
   const [grades, setGrades] = useState({});
   const [activeCell, setActiveCell] = useState(null); // { semIndex, rowIndex }
   const [errors, setErrors] = useState("");
+  const [info, setInfo] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [remarks, setRemarks] = useState("");
 
   const loadByPrn = async () => {
     const p = String(prn || "").trim();
@@ -51,6 +53,7 @@ export default function ClerkGradeEntryPage() {
       return;
     }
     setErrors("");
+    setInfo("");
     setLoading(true);
     try {
       const res = await clerkGradeEntryService.getByPrn(p);
@@ -112,6 +115,7 @@ export default function ClerkGradeEntryPage() {
       setSemesters(mappedSemesters);
       setGrades(nextGrades);
       setActiveCell({ semIndex: 0, rowIndex: 0 });
+      setRemarks("");
 
       setTimeout(() => {
         const el = document.getElementById("grade-0-0-th");
@@ -119,6 +123,7 @@ export default function ClerkGradeEntryPage() {
       }, 0);
     } catch (e) {
       setErrors(e?.message || "Failed to load student.");
+      setInfo("");
       setStudent(null);
       setSemesters([]);
       setGrades({});
@@ -150,19 +155,44 @@ export default function ClerkGradeEntryPage() {
 
   const canSubmit = student && semesters.length > 0 && incompleteCount === 0 && !submitting;
 
+  const buildItemsPayload = () => {
+    const items = [];
+    (semesters || []).forEach((sem) => {
+      (sem.subjects || []).forEach((sub) => {
+        const id = sub.curriculumSubjectId;
+        if (!id) return;
+        items.push({
+          curriculumSubjectId: id,
+          thGrade: grades?.[`${id}:th`] ?? sub.thGrade ?? "",
+          prGrade: grades?.[`${id}:pr`] ?? sub.prGrade ?? "",
+        });
+      });
+    });
+    return items;
+  };
+
   const saveDraft = async () => {
     if (!student) {
       setErrors("Load a student by PRN to save draft.");
       return;
     }
     setErrors("");
+    setInfo("");
     setSubmitting(true);
-    setTimeout(() => setSubmitting(false), 650);
+    try {
+      await clerkGradeEntryService.saveDraft(student.prn, buildItemsPayload());
+      setInfo("Draft saved.");
+    } catch (e) {
+      setErrors(e?.message || "Failed to save draft.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const reset = () => {
     setGrades({});
     setErrors("");
+    setInfo("");
     setTimeout(() => {
       const el = document.getElementById("grade-0-0-th");
       if (el) el.focus();
@@ -178,14 +208,23 @@ export default function ClerkGradeEntryPage() {
       setErrors("Please select grades for all subjects before submitting.");
       return;
     }
+    setInfo("");
     setConfirmOpen(true);
   };
 
   const confirmSubmit = async () => {
     setConfirmOpen(false);
     setErrors("");
+    setInfo("");
     setSubmitting(true);
-    setTimeout(() => setSubmitting(false), 900);
+    try {
+      await clerkGradeEntryService.submitToHod(student.prn, buildItemsPayload(), remarks);
+      setInfo("Submitted to HoD.");
+    } catch (e) {
+      setErrors(e?.message || "Failed to submit to HoD.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -279,6 +318,7 @@ export default function ClerkGradeEntryPage() {
             </div>
 
             {errors ? <Alert variant="destructive">{errors}</Alert> : null}
+            {info ? <Alert className="border-blue-200 bg-blue-50 text-[#1e40af]">{info}</Alert> : null}
             {incompleteCount > 0 ? (
               <div className="text-sm text-gray-600">
                 <span className="font-semibold text-gray-900 tabular-nums">{incompleteCount}</span> grade cells pending
@@ -362,6 +402,19 @@ export default function ClerkGradeEntryPage() {
               This will submit the entered grades for approval. Please confirm.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-900" htmlFor="hod-remarks">
+              Remarks (optional)
+            </label>
+            <textarea
+              id="hod-remarks"
+              className="min-h-[96px] w-full rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]/30"
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              placeholder="Add remarks for HoD (optional)"
+            />
+          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)} disabled={submitting}>

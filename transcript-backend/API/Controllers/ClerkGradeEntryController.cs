@@ -19,5 +19,18 @@ public sealed class ClerkGradeEntryController : ControllerBase
         var res = await _grades.GetByPrnAsync(prn, ct);
         return Ok(res);
     }
-}
 
+    [HttpPost("by-prn/{prn}/save-draft")]
+    public async Task<IActionResult> SaveDraft([FromRoute] string prn, [FromBody] GradeEntrySaveDraftRequestDto body, CancellationToken ct)
+    {
+        await _grades.SaveDraftAsync(prn, body, ct);
+        return NoContent();
+    }
+
+    [HttpPost("by-prn/{prn}/submit-to-hod")]
+    public async Task<IActionResult> SubmitToHod([FromRoute] string prn, [FromBody] GradeEntrySubmitRequestDto body, CancellationToken ct)
+    {
+        await _grades.SubmitToHoDAsync(prn, body, ct);
+        return NoContent();
+    }
+}
