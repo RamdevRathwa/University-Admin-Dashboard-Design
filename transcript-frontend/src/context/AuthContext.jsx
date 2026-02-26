@@ -131,31 +131,6 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Dev-only escape hatch so you can test role dashboards before staff accounts exist.
-  const devLoginAs = (role = "Student", rememberAuth = false) => {
-    const effectiveRole = role || "Student";
-    const devUser = {
-      id: "dev-user",
-      fullName: `${effectiveRole} (Dev)`,
-      role: effectiveRole,
-      email: "dev@msubaroda.local",
-      mobile: "0000000000",
-    };
-
-    writeAuthToStorage({
-      token: `DEV_JWT_${Date.now()}`,
-      role: effectiveRole,
-      userData: devUser,
-      rememberAuth,
-    });
-
-    setIsAuthenticated(true);
-    setUserRole(effectiveRole);
-    setUser(devUser);
-
-    return { success: true, role: effectiveRole };
-  };
-
   const value = {
     isAuthenticated,
     userRole,
@@ -166,7 +141,6 @@ export const AuthProvider = ({ children }) => {
     loginWithOtp,
     completeRegistration,
     logout,
-    devLoginAs,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

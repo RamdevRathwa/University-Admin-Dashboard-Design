@@ -169,20 +169,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var requests = await _requests.GetByStudentIdAsync(student.Id, ct);
         var req = requests.FirstOrDefault(x => x.Status == TranscriptRequestStatus.Submitted && x.CurrentStage == TranscriptStage.Clerk);
         if (req is null)
-        {
-            // Temporary safety net: allow clerk workflow testing even if the student request flow isn't wired yet.
-            // In the final flow, this should require the student to submit a request before clerk can forward it.
-            req = new TranscriptRequest
-            {
-                Id = Guid.NewGuid(),
-                StudentId = student.Id,
-                Status = TranscriptRequestStatus.Submitted,
-                CurrentStage = TranscriptStage.Clerk,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            await _requests.AddAsync(req, ct);
-            await _uow.SaveChangesAsync(ct);
-        }
+            throw new AppException("No clerk-stage submitted transcript request found for this student. Ask student to submit transcript request first.", 400, "request_missing");
 
         // Validate that all required grade parts are filled before forwarding.
         var subjects = await _curriculum.GetByProgramAsync(profile.Program, ct);

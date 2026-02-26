@@ -1,26 +1,33 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../../components/ui/table";
-import StatusBadge from "../../components/approvals/StatusBadge";
-
-function buildMockDecisions() {
-  return [
-    { id: "REQ-10015", student: "David Bernardo", department: "CSE", action: "Approved", at: "2026-02-24 11:10" },
-    { id: "REQ-10014", student: "Riya Patel", department: "CSE", action: "Rejected", at: "2026-02-24 10:32" },
-    { id: "REQ-10011", student: "Aman Shah", department: "CSE", action: "Send back to HoD", at: "2026-02-23 18:05" },
-  ];
-}
+import { Skeleton } from "../../components/ui/skeleton";
+import { apiRequest } from "../../services/apiClient";
 
 export default function DeanDashboardHome() {
-  const recent = useMemo(() => buildMockDecisions(), []);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    apiRequest("/api/dean/transcript-requests/pending")
+      .then((d) => alive && setPending(Array.isArray(d) ? d : []))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const stats = useMemo(() => {
-    const pending = 4;
-    const approvedToday = 2;
-    const rejectedToday = 1;
-    const totalApproved = 132;
-    return { pending, approvedToday, rejectedToday, totalApproved };
-  }, []);
+    const pendingCount = pending.length;
+    return {
+      pending: pendingCount,
+      approvedToday: 0,
+      rejectedToday: 0,
+      totalApproved: 0,
+    };
+  }, [pending]);
 
   return (
     <div className="space-y-6">
@@ -28,25 +35,25 @@ export default function DeanDashboardHome() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Pending Final Approval</CardDescription>
-            <CardTitle className="text-2xl">{stats.pending}</CardTitle>
+            {loading ? <Skeleton className="h-7 w-16" /> : <CardTitle className="text-2xl">{stats.pending}</CardTitle>}
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Approved Today</CardDescription>
-            <CardTitle className="text-2xl">{stats.approvedToday}</CardTitle>
+            {loading ? <Skeleton className="h-7 w-16" /> : <CardTitle className="text-2xl">{stats.approvedToday}</CardTitle>}
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Rejected Today</CardDescription>
-            <CardTitle className="text-2xl">{stats.rejectedToday}</CardTitle>
+            {loading ? <Skeleton className="h-7 w-16" /> : <CardTitle className="text-2xl">{stats.rejectedToday}</CardTitle>}
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Approved</CardDescription>
-            <CardTitle className="text-2xl">{stats.totalApproved}</CardTitle>
+            {loading ? <Skeleton className="h-7 w-16" /> : <CardTitle className="text-2xl">{stats.totalApproved}</CardTitle>}
           </CardHeader>
         </Card>
       </div>
@@ -54,31 +61,23 @@ export default function DeanDashboardHome() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Recent Decisions</CardTitle>
-          <CardDescription>Latest final approvals and rejections.</CardDescription>
+          <CardDescription>Decision history will appear here once decision/audit endpoints are enabled.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Request No</TableHead>
-                <TableHead>Student</TableHead>
-                <TableHead>Department</TableHead>
                 <TableHead>Decision</TableHead>
                 <TableHead>Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recent.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium text-gray-900">{r.id}</TableCell>
-                  <TableCell>{r.student}</TableCell>
-                  <TableCell>{r.department}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={r.action} />
-                  </TableCell>
-                  <TableCell className="text-gray-600 tabular-nums">{r.at}</TableCell>
-                </TableRow>
-              ))}
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={3} className="py-10 text-center text-sm text-gray-600">
+                  No decision records available.
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </CardContent>

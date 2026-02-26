@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchClerkDashboard } from "../../services/mockClerkApi";
+import { clerkDashboardService } from "../../services/clerkDashboardService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Badge } from "../../components/ui/badge";
@@ -11,7 +11,8 @@ export default function ClerkDashboardHome() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchClerkDashboard()
+    clerkDashboardService
+      .get()
       .then((d) => alive && setData(d))
       .finally(() => alive && setLoading(false));
     return () => {
@@ -57,7 +58,7 @@ export default function ClerkDashboardHome() {
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-base">Transcript Workload (Past 7 Days)</CardTitle>
-              <span className="text-xs text-gray-500">Mock data</span>
+              <span className="text-xs text-gray-500">Last 7 days</span>
             </div>
           </CardHeader>
           <CardContent>
@@ -69,7 +70,7 @@ export default function ClerkDashboardHome() {
               </div>
             ) : (
               <div className="grid grid-cols-7 gap-3 items-end h-44">
-                {data.workload7d.map((d) => (
+                {(data?.workload7d || []).map((d) => (
                   <div key={d.day} className="flex flex-col items-center gap-2">
                     <div className="w-full bg-gray-100 rounded-xl overflow-hidden">
                       <div
@@ -103,10 +104,13 @@ export default function ClerkDashboardHome() {
               </div>
             ) : (
               <ul className="space-y-3">
-                {data.activities.map((a) => (
+                {(data?.activities || []).length === 0 ? (
+                  <li className="p-3 rounded-xl border border-gray-200 text-sm text-gray-600">No recent activity.</li>
+                ) : null}
+                {(data?.activities || []).map((a) => (
                   <li key={a.id} className="flex items-start justify-between gap-4 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition">
                     <p className="text-sm text-gray-800">{a.text}</p>
-                    <span className="text-xs text-gray-500 whitespace-nowrap">{a.time}</span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">{a.at ? new Date(a.at).toLocaleString("en-IN") : ""}</span>
                   </li>
                 ))}
               </ul>
@@ -117,4 +121,3 @@ export default function ClerkDashboardHome() {
     </div>
   );
 }
-

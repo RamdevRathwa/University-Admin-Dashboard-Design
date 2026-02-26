@@ -42,7 +42,7 @@ export default function ClerkSettings() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-sm text-gray-500">Update profile and notification preferences (UI only).</p>
+        <p className="text-sm text-gray-500">Update profile and notification preferences.</p>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -78,7 +78,7 @@ export default function ClerkSettings() {
           <div className="p-4 rounded-xl border border-gray-200 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-900">Theme</p>
-              <p className="text-sm text-gray-500 mt-0.5">{themeLabel} mode (mock)</p>
+              <p className="text-sm text-gray-500 mt-0.5">{themeLabel} mode</p>
             </div>
             <button
               type="button"

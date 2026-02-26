@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -8,57 +8,59 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import ApprovalTimeline from "../../components/approvals/ApprovalTimeline";
 import StatusBadge from "../../components/approvals/StatusBadge";
 import SemesterTranscriptTable from "../../components/clerk/grade-entry/SemesterTranscriptTable";
+import { apiRequest } from "../../services/apiClient";
 
-function buildMockReview(id) {
-  return {
-    id,
-    status: "Forwarded to Dean",
-    hodApprovedAt: "2026-02-24",
-    hodRemarks: "Checked grade sheet and documents. Forwarding for final approval.",
-    student: {
-      fullName: "David Bernardo Francisco",
-      prn: "8022053249",
-      department: "Computer Science and Engineering",
-      program: "BE-CSE",
-      semester: "Sem 2",
-      sgpa: 7.8,
-      cgpa: 7.95,
-    },
-    semesters: [
-      {
-        yearTitle: "BE-I (Computer Science and Engineering)   2022-2023",
-        termTitle: "Second Semester (DEC 2022 - MAY 2023)",
-        creditPointScheme: 10,
-        subjects: [
-          { curriculumSubjectId: "sub-1", subjectName: "Applied Physics - II", thHours: 4, prHours: 2, thCredits: 4, prCredits: 1 },
-          { curriculumSubjectId: "sub-2", subjectName: "Applied Mathematics-II", thHours: 4, prHours: 0, thCredits: 4, prCredits: 0 },
-          { curriculumSubjectId: "sub-3", subjectName: "Programming for Problem Solving", thHours: 3, prHours: 2, thCredits: 3, prCredits: 1 },
-        ],
-      },
-    ],
-    grades: {
-      "sub-1:th": "A",
-      "sub-1:pr": "B+",
-      "sub-2:th": "A+",
-      "sub-3:th": "B",
-      "sub-3:pr": "A",
-    },
-  };
+function pickHodRemarks(approvals) {
+  const list = Array.isArray(approvals) ? approvals : [];
+  const lastHod = [...list].reverse().find((a) => String(a.role) === "HoD");
+  return (lastHod?.remarks || "").trim();
 }
 
 export default function DeanReviewPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const data = useMemo(() => buildMockReview(id), [id]);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [review, setReview] = useState(null);
 
   const [remarks, setRemarks] = useState("");
   const [reviewed, setReviewed] = useState(false);
-  const [decision, setDecision] = useState(null); // Final Approved | Rejected | Sent Back
-  const [error, setError] = useState("");
-
+  const [decision, setDecision] = useState(null); // Approved | Rejected | Returned
   const [confirm, setConfirm] = useState({ open: false, action: null });
 
-  const canAct = reviewed && !decision;
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    apiRequest(`/api/dean/transcript-requests/${encodeURIComponent(id)}/review`)
+      .then((d) => alive && setReview(d))
+      .catch((e) => alive && setError(e?.message || "Failed to load review."))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  const gradeSheet = review?.gradeSheet || review?.GradeSheet;
+  const student = gradeSheet?.student || gradeSheet?.Student;
+  const semesters = gradeSheet?.semesters || gradeSheet?.Semesters || [];
+
+  const grades = useMemo(() => {
+    const g = {};
+    (semesters || []).forEach((sem) => {
+      (sem.subjects || []).forEach((s) => {
+        if (!s?.curriculumSubjectId) return;
+        if (Number(s.thCredits) > 0) g[`${s.curriculumSubjectId}:th`] = s.thGrade || "";
+        if (Number(s.prCredits) > 0) g[`${s.curriculumSubjectId}:pr`] = s.prGrade || "";
+      });
+    });
+    return g;
+  }, [semesters]);
+
+  const hodRemarks = useMemo(() => pickHodRemarks(review?.approvals), [review?.approvals]);
+
+  const canAct = reviewed && !decision && !loading && !error;
 
   const openConfirm = (action) => {
     setError("");
@@ -69,12 +71,25 @@ export default function DeanReviewPage() {
     setConfirm({ open: true, action });
   };
 
-  const runAction = () => {
+  const runAction = async () => {
     const action = confirm.action;
     setConfirm({ open: false, action: null });
-    if (action === "Approve") setDecision("Final Approved");
-    if (action === "Reject") setDecision("Rejected");
-    if (action === "SendBack") setDecision("Sent back to HoD");
+    setError("");
+
+    try {
+      if (action === "Approve") {
+        await apiRequest(`/api/dean/transcript-requests/${encodeURIComponent(id)}/approve`, { method: "POST", body: { remarks } });
+        setDecision("Approved");
+      } else if (action === "Reject") {
+        await apiRequest(`/api/dean/transcript-requests/${encodeURIComponent(id)}/reject`, { method: "POST", body: { remarks } });
+        setDecision("Rejected");
+      } else if (action === "SendBack") {
+        await apiRequest(`/api/dean/transcript-requests/${encodeURIComponent(id)}/return-to-hod`, { method: "POST", body: { remarks } });
+        setDecision("Returned to HoD");
+      }
+    } catch (e) {
+      setError(e?.message || "Action failed.");
+    }
   };
 
   return (
@@ -82,10 +97,10 @@ export default function DeanReviewPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Review Transcript</h2>
-          <p className="text-sm text-gray-500">Dean can make final approval or reject / send back.</p>
+          <p className="text-sm text-gray-500">Dean final approval (read-only review).</p>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge status={decision || data.status} />
+          <StatusBadge status={decision || review?.request?.status || "ForwardedToDean"} />
           <Button variant="outline" type="button" onClick={() => navigate("/dean/pending")}>
             Back
           </Button>
@@ -94,62 +109,53 @@ export default function DeanReviewPage() {
 
       <ApprovalTimeline currentStage="Dean" />
 
+      {error ? <Alert variant="destructive">{error}</Alert> : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Student Details (Read Only)</CardTitle>
-          <CardDescription>Verify request context and summary.</CardDescription>
+          <CardDescription>Verify request context.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">Student Name</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1">{data.student.fullName}</div>
+          {loading ? (
+            <div className="text-sm text-gray-600">Loading...</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Info label="Student Name" value={student?.fullName} />
+              <Info label="PRN" value={student?.prn} mono />
+              <Info label="Department" value={student?.department} />
+              <Info label="Program" value={student?.program} />
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">PRN</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1 tabular-nums">{data.student.prn}</div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">Department</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1">{data.student.department}</div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">Program</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1">{data.student.program}</div>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Grade Sheet (Read Only)</CardTitle>
-          <CardDescription>Grades are locked. Review only.</CardDescription>
+          <CardDescription>Grades cannot be edited at Dean stage.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {data.semesters.map((sem, idx) => (
-            <SemesterTranscriptTable
-              key={idx}
-              semIndex={idx}
-              yearTitle={sem.yearTitle}
-              termTitle={sem.termTitle}
-              creditPointScheme={sem.creditPointScheme}
-              subjects={sem.subjects.map((s) => ({
-                curriculumSubjectId: s.curriculumSubjectId,
-                subjectName: s.subjectName,
-                thHours: s.thHours,
-                prHours: s.prHours,
-                thCredits: s.thCredits,
-                prCredits: s.prCredits,
-              }))}
-              grades={data.grades}
-              setGrade={() => {}}
-              active={null}
-              setActive={() => {}}
-              cumulativeBefore={null}
-              readOnly
-            />
-          ))}
+          {(semesters || []).length === 0 ? (
+            <div className="text-sm text-gray-600">No semester data found.</div>
+          ) : (
+            (semesters || []).map((sem, idx) => (
+              <SemesterTranscriptTable
+                key={idx}
+                semIndex={idx}
+                yearTitle={sem.yearTitle}
+                termTitle={sem.termTitle}
+                creditPointScheme={sem.creditPointScheme}
+                subjects={sem.subjects}
+                grades={grades}
+                setGrade={() => {}}
+                active={null}
+                setActive={() => {}}
+                cumulativeBefore={null}
+                readOnly
+              />
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -160,30 +166,7 @@ export default function DeanReviewPage() {
         </CardHeader>
         <CardContent>
           <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
-            {data.hodRemarks || "No remarks provided."}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Academic Summary</CardTitle>
-          <CardDescription>Calculated values (read only).</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">Semester</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1">{data.student.semester}</div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">SGPA</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1 tabular-nums">{data.student.sgpa.toFixed(2)}</div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-xs text-gray-500">CGPA</div>
-              <div className="text-sm font-semibold text-gray-900 mt-1 tabular-nums">{data.student.cgpa.toFixed(2)}</div>
-            </div>
+            {hodRemarks || "No remarks provided."}
           </div>
         </CardContent>
       </Card>
@@ -200,9 +183,9 @@ export default function DeanReviewPage() {
               checked={reviewed}
               onChange={(e) => setReviewed(e.target.checked)}
               disabled={!!decision}
-              className="h-4 w-4 rounded border-gray-300 text-[#1e40af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]"
+              className="h-4 w-4 rounded border-gray-300 text-[#1e40af] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]/30"
             />
-            I have reviewed the student details, grade sheet, HoD remarks, and summary.
+            I have reviewed the details and grade sheet.
           </label>
 
           <div className="space-y-2">
@@ -215,8 +198,6 @@ export default function DeanReviewPage() {
             />
           </div>
 
-          {error ? <Alert variant="destructive">{error}</Alert> : null}
-
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-end">
             <Button type="button" variant="outline" disabled={!canAct} onClick={() => openConfirm("SendBack")}>
               Send Back to HoD
@@ -224,41 +205,52 @@ export default function DeanReviewPage() {
             <Button type="button" variant="destructive" disabled={!canAct} onClick={() => openConfirm("Reject")}>
               Reject
             </Button>
-            <Button type="button" disabled={!canAct} onClick={() => openConfirm("Approve")}>
+            <Button type="button" className="bg-[#1e40af] hover:bg-[#1e40af]/90" disabled={!canAct} onClick={() => openConfirm("Approve")}>
               Final Approve
             </Button>
           </div>
 
           {decision ? (
-            <div className="text-sm text-gray-700">
-              Decision recorded: <span className="font-semibold text-gray-900">{decision}</span>
-            </div>
+            <Alert className="border-blue-200 bg-blue-50 text-[#1e40af]">
+              Decision recorded: {decision}
+            </Alert>
           ) : null}
         </CardContent>
       </Card>
 
-      <Dialog open={confirm.open} onOpenChange={(v) => setConfirm((p) => ({ ...p, open: v }))}>
-        <DialogContent>
+      <Dialog open={confirm.open} onOpenChange={(open) => setConfirm((p) => ({ ...p, open }))}>
+        <DialogContent className="rounded-xl">
           <DialogHeader>
-            <DialogTitle>Confirm action?</DialogTitle>
+            <DialogTitle>Confirm Action</DialogTitle>
             <DialogDescription>
               {confirm.action === "Approve"
-                ? "This will finalize approval and move the request to Admin for transcript generation."
-                : confirm.action === "SendBack"
-                ? "This will send the request back to HoD with your remarks."
-                : "This will reject the transcript request with your remarks."}
+                ? "Final approve this transcript request? This will lock the transcript and generate the official PDF."
+                : confirm.action === "Reject"
+                ? "Reject this request and return it to HoD."
+                : "Send this request back to HoD for review."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setConfirm({ open: false, action: null })}>
               Cancel
             </Button>
-            <Button type="button" onClick={runAction}>
+            <Button type="button" className="bg-[#1e40af] hover:bg-[#1e40af]/90" onClick={runAction}>
               Confirm
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function Info({ label, value, mono }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={["text-sm font-semibold text-gray-900 mt-1", mono ? "tabular-nums" : ""].join(" ")}>
+        {value || "-"}
+      </div>
     </div>
   );
 }

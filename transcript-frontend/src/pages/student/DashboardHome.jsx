@@ -1,30 +1,58 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../components/ui/table";
+import { Skeleton } from "../../components/ui/skeleton";
+import { apiRequest } from "../../services/apiClient";
+import StatusBadge from "../../components/approvals/StatusBadge";
+
+function statusVariant(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "approved") return "success";
+  if (s === "rejected") return "destructive";
+  if (s.includes("forwarded")) return "default";
+  if (s === "submitted") return "warning";
+  return "neutral";
+}
 
 export default function DashboardHome() {
-  const stats = [
-    { title: "Total Requests", value: "12", variant: "default" },
-    { title: "Approved", value: "8", variant: "success" },
-    { title: "Pending", value: "3", variant: "warning" },
-    { title: "Rejected", value: "1", variant: "destructive" },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState([]);
+  const [approved, setApproved] = useState([]);
 
-  const recentActivity = [
-    { id: "TR-001", date: "2024-01-15", status: "Approved", type: "Official Transcript" },
-    { id: "TR-002", date: "2024-01-10", status: "Pending", type: "Unofficial Transcript" },
-    { id: "TR-003", date: "2024-01-05", status: "Processing", type: "Official Transcript" },
-  ];
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    Promise.all([apiRequest("/api/transcripts/my"), apiRequest("/api/student/transcripts/approved")])
+      .then(([my, appr]) => {
+        if (!alive) return;
+        setRequests(Array.isArray(my) ? my : []);
+        setApproved(Array.isArray(appr) ? appr : []);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  const timeline = [
-    { step: "Request Submitted", date: "2024-01-10", status: "completed" },
-    { step: "Clerk Review", date: "2024-01-11", status: "completed" },
-    { step: "HoD Approval", date: "2024-01-12", status: "completed" },
-    { step: "Dean Approval", date: "2024-01-13", status: "pending" },
-    { step: "Completed", date: null, status: "pending" },
-  ];
+  const stats = useMemo(() => {
+    const total = requests.length;
+    const approvedCount = requests.filter((r) => String(r.status) === "Approved").length;
+    const rejectedCount = requests.filter((r) => String(r.status) === "Rejected").length;
+    const pendingCount = total - approvedCount - rejectedCount;
+    return [
+      { title: "Total Requests", value: total, variant: "default" },
+      { title: "Approved", value: approvedCount, variant: "success" },
+      { title: "Pending", value: pendingCount, variant: "warning" },
+      { title: "Rejected", value: rejectedCount, variant: "destructive" },
+    ];
+  }, [requests]);
+
+  const recent = useMemo(() => {
+    return [...requests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  }, [requests]);
 
   return (
     <div className="space-y-6">
@@ -33,7 +61,7 @@ export default function DashboardHome() {
           <Card key={stat.title} className="hover:shadow-md transition-shadow">
             <CardHeader className="pb-3">
               <CardDescription className="text-xs uppercase tracking-wide">{stat.title}</CardDescription>
-              <CardTitle className="text-3xl">{stat.value}</CardTitle>
+              {loading ? <Skeleton className="h-9 w-16" /> : <CardTitle className="text-3xl">{stat.value}</CardTitle>}
             </CardHeader>
             <CardContent className="pt-0">
               <Badge variant={stat.variant}>{stat.title}</Badge>
@@ -52,8 +80,8 @@ export default function DashboardHome() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base">Recent Activity</CardTitle>
-              <span className="text-xs text-gray-500">Last {recentActivity.length} requests</span>
+              <CardTitle className="text-base">Recent Requests</CardTitle>
+              <span className="text-xs text-gray-500">Last {recent.length} items</span>
             </div>
           </CardHeader>
           <CardContent>
@@ -61,20 +89,31 @@ export default function DashboardHome() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Request ID</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Created</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentActivity.map((activity) => (
-                  <TableRow key={activity.id}>
-                    <TableCell className="font-medium text-gray-900">{activity.id}</TableCell>
-                    <TableCell>{activity.date}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={activity.status} />
-                    </TableCell>
+                {loading ? (
+                  <>
+                    <TableRow><TableCell colSpan={3}><Skeleton className="h-10" /></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={3}><Skeleton className="h-10" /></TableCell></TableRow>
+                  </>
+                ) : recent.length === 0 ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={3} className="py-10 text-center text-sm text-gray-600">No requests yet.</TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  recent.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium text-gray-900">{String(r.id).slice(0, 8).toUpperCase()}</TableCell>
+                      <TableCell className="text-gray-600 tabular-nums">{r.createdAt ? new Date(r.createdAt).toLocaleString("en-IN") : "-"}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={String(r.status)} />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -82,31 +121,28 @@ export default function DashboardHome() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Latest Request Timeline</CardTitle>
+            <CardTitle className="text-base">Approved Transcripts</CardTitle>
+            <CardDescription>Download becomes available after Dean approval.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="relative">
-              <div className="absolute left-4 top-2 bottom-2 w-px bg-gray-200 pointer-events-none" />
-              <ul className="space-y-4 relative">
-                {timeline.map((item, index) => (
-                  <li key={index} className="flex items-start gap-4">
-                    <div
-                      className={[
-                        "relative z-10 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold",
-                        item.status === "completed" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700",
-                      ].join(" ")}
-                      aria-hidden="true"
-                    >
-                      {item.status === "completed" ? "OK" : index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{item.step}</p>
-                      {item.date ? <p className="text-xs text-gray-500 mt-0.5">{item.date}</p> : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <CardContent className="space-y-3">
+            {loading ? (
+              <>
+                <Skeleton className="h-12" />
+                <Skeleton className="h-12" />
+              </>
+            ) : approved.length === 0 ? (
+              <div className="text-sm text-gray-600">No approved transcripts yet.</div>
+            ) : (
+              approved.slice(0, 3).map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 p-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-900">Request {String(t.transcriptRequestId).slice(0, 8).toUpperCase()}</div>
+                    <div className="text-xs text-gray-500">Approved: {t.approvedAt ? new Date(t.approvedAt).toLocaleString("en-IN") : "-"}</div>
+                  </div>
+                  <Badge variant={statusVariant(t.status)}>{t.status}</Badge>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </section>
@@ -114,13 +150,3 @@ export default function DashboardHome() {
   );
 }
 
-function StatusBadge({ status }) {
-  const config = {
-    Approved: { variant: "success", label: "Approved" },
-    Pending: { variant: "warning", label: "Pending" },
-    Processing: { variant: "default", label: "Processing" },
-    Rejected: { variant: "destructive", label: "Rejected" },
-  };
-  const c = config[status] || config.Pending;
-  return <Badge variant={c.variant}>{c.label}</Badge>;
-}

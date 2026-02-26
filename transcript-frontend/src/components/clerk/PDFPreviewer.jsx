@@ -23,11 +23,10 @@ export default function PDFPreviewer({ title, url }) {
           />
         ) : (
           <div className="h-64 flex items-center justify-center text-sm text-gray-500">
-            Preview not available (mock)
+            Preview not available
           </div>
         )}
       </div>
     </div>
   );
 }
-
