@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Card } from "../components/ui/card";
+import { Menu, Bell, LayoutDashboard, User, FilePlus, Clock, CreditCard, Download } from "lucide-react";
 
 export default function StudentLayout() {
   const navigate = useNavigate();
@@ -23,12 +24,12 @@ export default function StudentLayout() {
 
   const menuItems = useMemo(
     () => [
-      { name: "Dashboard", path: "/dashboard" },
-      { name: "Profile", path: "/dashboard/profile" },
-      { name: "Transcript Request", path: "/dashboard/request" },
-      { name: "Request Status", path: "/dashboard/status" },
-      { name: "Payments", path: "/dashboard/payments" },
-      { name: "Downloads", path: "/dashboard/downloads" },
+      { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+      { name: "Profile", path: "/dashboard/profile", icon: User },
+      { name: "Transcript Request", path: "/dashboard/request", icon: FilePlus },
+      { name: "Request Status", path: "/dashboard/status", icon: Clock },
+      { name: "Payments", path: "/dashboard/payments", icon: CreditCard },
+      { name: "Downloads", path: "/dashboard/downloads", icon: Download },
     ],
     []
   );
@@ -60,7 +61,7 @@ export default function StudentLayout() {
             ].join(" ")
           }
         >
-          <span className="h-2.5 w-2.5 rounded-full bg-current opacity-60" aria-hidden="true" />
+          <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
           {compact ? null : <span className="truncate">{item.name}</span>}
         </NavLink>
       ))}
@@ -103,7 +104,7 @@ export default function StudentLayout() {
                 <SheetTrigger asChild>
                   <Button variant="outline" size="icon" className="lg:hidden">
                     <span className="sr-only">Open menu</span>
-                    <span aria-hidden="true">Menu</span>
+                    <Menu className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-4">
@@ -128,7 +129,7 @@ export default function StudentLayout() {
             <div className="flex items-center gap-3">
               <Button variant="outline" size="icon" className="relative">
                 <span className="sr-only">Notifications</span>
-                <span aria-hidden="true">Notif</span>
+                <Bell className="h-4 w-4" aria-hidden="true" />
                 {notifications > 0 ? (
                   <span className="absolute -top-1 -right-1">
                     <Badge variant="destructive" className="px-1.5 py-0 text-[10px]">

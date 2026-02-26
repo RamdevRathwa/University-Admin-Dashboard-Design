@@ -6,6 +6,7 @@ import { Sheet, SheetTrigger, SheetContent } from "../components/ui/sheet";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "../components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Separator } from "../components/ui/separator";
+import { LayoutDashboard, Menu } from "lucide-react";
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
@@ -15,9 +16,7 @@ export default function DashboardLayout() {
   const role = userRole || "Admin";
   const name = user?.fullName || role;
 
-  const items = [
-    { name: "Dashboard", path: `/${role.toLowerCase()}` },
-  ];
+  const items = [{ name: "Dashboard", path: `/${role.toLowerCase()}`, icon: LayoutDashboard }];
 
   const Nav = ({ onNavigate }) => (
     <nav className="space-y-1">
@@ -33,7 +32,7 @@ export default function DashboardLayout() {
             ].join(" ")
           }
         >
-          <span className="h-2.5 w-2.5 rounded-full bg-current opacity-60" aria-hidden="true" />
+          <it.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="truncate">{it.name}</span>
         </NavLink>
       ))}
@@ -62,9 +61,8 @@ export default function DashboardLayout() {
             <div className="flex items-center gap-3 min-w-0">
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="lg:hidden">
-                    <span className="sr-only">Open menu</span>
-                    <span aria-hidden="true">≡</span>
+                  <Button variant="outline" size="icon" className="lg:hidden" aria-label="Open menu">
+                    <Menu className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-4">

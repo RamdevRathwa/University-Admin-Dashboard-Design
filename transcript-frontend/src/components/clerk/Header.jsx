@@ -3,6 +3,7 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "../ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Menu, Bell } from "lucide-react";
 
 export default function Header({ pageTitle, clerkName = "Clerk", onToggleSidebar, onLogout, onOpenMobileMenu }) {
   return (
@@ -10,11 +11,11 @@ export default function Header({ pageTitle, clerkName = "Clerk", onToggleSidebar
       <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Button variant="outline" size="icon" className="lg:hidden" onClick={onOpenMobileMenu} aria-label="Open menu">
-            <span aria-hidden="true">Menu</span>
+            <Menu className="h-4 w-4" aria-hidden="true" />
           </Button>
 
           <Button variant="outline" size="icon" className="hidden lg:inline-flex" onClick={onToggleSidebar} aria-label="Toggle sidebar">
-            <span aria-hidden="true">Menu</span>
+            <Menu className="h-4 w-4" aria-hidden="true" />
           </Button>
 
           <div className="flex items-center gap-3 min-w-0">
@@ -28,7 +29,7 @@ export default function Header({ pageTitle, clerkName = "Clerk", onToggleSidebar
 
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" className="relative" aria-label="Notifications">
-            <span aria-hidden="true">Notif</span>
+            <Bell className="h-4 w-4" aria-hidden="true" />
             <span className="absolute -top-1 -right-1">
               <Badge variant="destructive" className="px-1.5 py-0 text-[10px]">
                 3
