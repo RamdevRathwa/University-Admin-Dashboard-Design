@@ -1,27 +1,208 @@
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Alert } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import SearchBar from "../../components/clerk/SearchBar";
+import StatusBadge from "../../components/clerk/StatusBadge";
+import VerificationModal from "../../components/clerk/VerificationModal";
+import { clerkVerificationService } from "../../services/clerkVerificationService";
+
+function formatDateTime(v) {
+  if (!v) return "-";
+  try {
+    const d = new Date(v);
+    return d.toLocaleString();
+  } catch {
+    return String(v);
+  }
+}
 
 export default function ClerkStudentVerification() {
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [active, setActive] = useState(null); // detail payload
+
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await clerkVerificationService.pending(q);
+      setRows(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setError(e?.message || "Failed to load pending verifications.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openReview = async (requestId) => {
+    setBusy(true);
+    setError("");
+    try {
+      const detail = await clerkVerificationService.review(requestId);
+      // Attach an overall status hint for modal header badge.
+      const pending = (detail?.documents || []).filter((d) => String(d.status || "").toLowerCase() === "pending").length;
+      const returned = (detail?.documents || []).filter((d) => String(d.status || "").toLowerCase() === "returned").length;
+      const status = returned > 0 ? "Returned" : pending > 0 ? "Pending" : "Approved";
+      setActive({ ...detail, status });
+      setOpen(true);
+    } catch (e) {
+      setError(e?.message || "Failed to load verification details.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = async (remarks) => {
+    if (!active?.requestId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await clerkVerificationService.approve(active.requestId, remarks);
+      setOpen(false);
+      setActive(null);
+      await load();
+    } catch (e) {
+      setError(e?.message || "Approve failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const returnToStudent = async (remarks) => {
+    if (!active?.requestId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await clerkVerificationService.returnToStudent(active.requestId, remarks);
+      setOpen(false);
+      setActive(null);
+      await load();
+    } catch (e) {
+      setError(e?.message || "Return failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const empty = !loading && (!rows || rows.length === 0);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Student Academic Verification</h2>
-        <p className="text-sm text-gray-500">Document verification will be enabled when the backend document module is ready.</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Student Academic Verification</h2>
+          <p className="text-sm text-gray-500">Verify uploaded documents before grade entry is forwarded to HoD.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={load} disabled={loading || busy}>
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      <Alert className="border-blue-200 bg-blue-50 text-[#1e40af]">
-        No verification data available right now.
-      </Alert>
+      <SearchBar
+        value={q}
+        onChange={setQ}
+        placeholder="Search by name, PRN, email, or mobile"
+        rightSlot={
+          <Button onClick={load} disabled={loading || busy}>
+            Search
+          </Button>
+        }
+      />
+
+      {error ? <Alert variant="destructive">{error}</Alert> : null}
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Pending Verifications</CardTitle>
-          <CardDescription>There are no pending verification records.</CardDescription>
+          <CardDescription>
+            {loading ? "Loading..." : empty ? "No pending verifications." : `Showing ${rows.length} request(s).`}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-gray-600">
-          This page is intentionally blank until real document records exist.
+        <CardContent>
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <Table>
+              <TableHeader className="sticky top-0 bg-gray-50 z-10">
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead className="w-[140px]">PRN</TableHead>
+                  <TableHead>Program</TableHead>
+                  <TableHead className="w-[140px]">Docs</TableHead>
+                  <TableHead className="w-[180px]">Submitted</TableHead>
+                  <TableHead className="w-[120px]">Status</TableHead>
+                  <TableHead className="w-[120px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows && rows.length ? (
+                  rows.map((r) => (
+                    <TableRow key={r.requestId} className="hover:bg-gray-50">
+                      <TableCell className="min-w-[240px]">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{r?.student?.name || "-"}</span>
+                          <span className="text-xs text-gray-500">{r?.student?.email || "-"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{r?.student?.prn || "-"}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex flex-col">
+                          <span className="text-gray-900">{r?.student?.program || "-"}</span>
+                          <span className="text-xs text-gray-500">{r?.student?.department || "-"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <span className="text-gray-900">{r?.counts?.pending ?? 0} pending</span>
+                        {r?.counts?.returned ? <span className="text-xs text-red-600 block">{r.counts.returned} returned</span> : null}
+                      </TableCell>
+                      <TableCell className="text-xs text-gray-600">{formatDateTime(r?.createdAt)}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={r?.status || "Pending"} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" onClick={() => openReview(r.requestId)} disabled={busy}>
+                          Review
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-sm text-gray-600">
+                      {loading ? "Loading..." : "No records."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
+
+      <VerificationModal
+        open={open}
+        data={active}
+        onClose={() => {
+          if (busy) return;
+          setOpen(false);
+          setActive(null);
+        }}
+        onApprove={approve}
+        onReturn={returnToStudent}
+        busy={busy}
+      />
     </div>
   );
 }

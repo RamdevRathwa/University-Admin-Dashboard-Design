@@ -1,4 +1,5 @@
 using Domain.Enums;
+using Domain.Interfaces;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +13,12 @@ namespace API.Controllers;
 public sealed class ClerkDashboardController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public ClerkDashboardController(AppDbContext db) => _db = db;
+    private readonly ITranscriptDocumentRepository _docs;
+    public ClerkDashboardController(AppDbContext db, ITranscriptDocumentRepository docs)
+    {
+        _db = db;
+        _docs = docs;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct)
@@ -65,11 +71,13 @@ public sealed class ClerkDashboardController : ControllerBase
             at = a.ActionAt,
         }).ToList();
 
+        var pendingVerifications = await _docs.CountPendingVerificationsAsync(ct);
+
         return Ok(new
         {
             stats = new
             {
-                pendingVerifications = 0,
+                pendingVerifications,
                 pendingGradeEntry = clerkQueue + returnedToClerk,
                 forwardedToHod,
                 rejectedRequests = rejected
@@ -79,4 +87,3 @@ public sealed class ClerkDashboardController : ControllerBase
         });
     }
 }
-

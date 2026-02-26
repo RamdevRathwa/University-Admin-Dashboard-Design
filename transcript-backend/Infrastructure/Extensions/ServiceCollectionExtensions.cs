@@ -5,6 +5,7 @@ using Infrastructure.Repositories;
 using Infrastructure.Services.Jwt;
 using Infrastructure.Services.Messaging;
 using Infrastructure.Services.Otp;
+using Infrastructure.Services.Documents;
 using Infrastructure.Services.Transcripts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SmtpOptions>(config.GetSection(SmtpOptions.SectionName));
         services.Configure<Msg91Options>(config.GetSection(Msg91Options.SectionName));
         services.Configure<TranscriptStorageOptions>(config.GetSection(TranscriptStorageOptions.SectionName));
+        services.Configure<DocumentStorageOptions>(config.GetSection(DocumentStorageOptions.SectionName));
 
         services.AddDbContext<AppDbContext>(opt =>
         {
@@ -37,10 +39,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICurriculumSubjectRepository, CurriculumSubjectRepository>();
         services.AddScoped<IStudentGradeEntryRepository, StudentGradeEntryRepository>();
         services.AddScoped<ITranscriptRepository, TranscriptRepository>();
+        services.AddScoped<ITranscriptDocumentRepository, TranscriptDocumentRepository>();
 
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<ITranscriptPdfService, TranscriptPdfService>();
+        services.AddScoped<IDocumentStorage, FileSystemDocumentStorage>();
 
         services.AddScoped<IEmailSender, SmtpEmailSender>();
         var fixedOtp = (config.GetSection(OtpOptions.SectionName).GetValue<string>("FixedCode") ?? string.Empty).Trim();

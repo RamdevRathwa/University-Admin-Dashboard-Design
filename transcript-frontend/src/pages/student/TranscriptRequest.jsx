@@ -14,6 +14,7 @@ import { Separator } from "../../components/ui/separator";
 import { useToast } from "../../components/ui/use-toast";
 import { studentProfileService } from "../../services/studentProfileService";
 import { transcriptService } from "../../services/transcriptService";
+import { studentDocumentsService } from "../../services/studentDocumentsService";
 
 const formatISODate = (d) => {
   const year = d.getFullYear();
@@ -262,7 +263,13 @@ export default function TranscriptRequest() {
 
       await studentProfileService.upsertMyProfile(dto);
       const draft = await transcriptService.createDraft();
-      const submitted = await transcriptService.submitRequest(draft?.id || draft?.Id);
+      const requestId = draft?.id || draft?.Id;
+
+      await studentDocumentsService.upload(requestId, "Marksheet", documents.marksheets || []);
+      await studentDocumentsService.upload(requestId, "GovernmentId", documents.govtId ? [documents.govtId] : []);
+      await studentDocumentsService.upload(requestId, "AuthorityLetter", documents.authorityLetter ? [documents.authorityLetter] : []);
+
+      const submitted = await transcriptService.submitRequest(requestId);
 
       toast({ title: "Request submitted", description: `Reference ID: ${submitted?.id || submitted?.Id}` });
     } catch (err) {

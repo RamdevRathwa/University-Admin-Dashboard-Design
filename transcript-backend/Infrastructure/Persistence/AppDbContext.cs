@@ -17,6 +17,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<Transcript> Transcripts => Set<Transcript>();
     public DbSet<TranscriptSemesterSnapshot> TranscriptSemesterSnapshots => Set<TranscriptSemesterSnapshot>();
     public DbSet<TranscriptSubjectSnapshot> TranscriptSubjectSnapshots => Set<TranscriptSubjectSnapshot>();
+    public DbSet<TranscriptDocument> TranscriptDocuments => Set<TranscriptDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +70,22 @@ public sealed class AppDbContext : DbContext
                 .HasForeignKey(x => x.StudentId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(x => new { x.StudentId, x.Status, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<TranscriptDocument>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+            b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+            b.Property(x => x.StoragePath).HasMaxLength(600).IsRequired();
+            b.Property(x => x.Remarks).HasMaxLength(1000);
+            b.HasIndex(x => new { x.TranscriptRequestId, x.DocumentType });
+            b.HasIndex(x => new { x.StudentId, x.TranscriptRequestId });
+
+            b.HasOne(x => x.TranscriptRequest)
+                .WithMany(x => x.Documents)
+                .HasForeignKey(x => x.TranscriptRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TranscriptApproval>(b =>

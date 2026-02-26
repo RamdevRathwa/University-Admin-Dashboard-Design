@@ -14,5 +14,5 @@ public sealed class TranscriptRequest
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public ICollection<TranscriptApproval> Approvals { get; set; } = new List<TranscriptApproval>();
+    public ICollection<TranscriptDocument> Documents { get; set; } = new List<TranscriptDocument>();
 }
-

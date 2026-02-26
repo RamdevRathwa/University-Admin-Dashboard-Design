@@ -15,6 +15,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
     private readonly IStudentProfileRepository _profiles;
     private readonly ITranscriptRequestRepository _requests;
     private readonly IClerkWorkflowService _workflow;
+    private readonly ITranscriptDocumentRepository _documents;
     private readonly IUnitOfWork _uow;
 
     public ClerkGradeEntryService(
@@ -24,6 +25,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         IStudentGradeEntryRepository grades,
         ITranscriptRequestRepository requests,
         IClerkWorkflowService workflow,
+        ITranscriptDocumentRepository documents,
         IUnitOfWork uow)
     {
         _current = current;
@@ -32,6 +34,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         _grades = grades;
         _requests = requests;
         _workflow = workflow;
+        _documents = documents;
         _uow = uow;
     }
 
@@ -170,6 +173,9 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var req = requests.FirstOrDefault(x => x.Status == TranscriptRequestStatus.Submitted && x.CurrentStage == TranscriptStage.Clerk);
         if (req is null)
             throw new AppException("No clerk-stage submitted transcript request found for this student. Ask student to submit transcript request first.", 400, "request_missing");
+
+        if (!await _documents.AreRequiredApprovedAsync(req.Id, ct))
+            throw new AppException("Student documents are not verified yet. Verify Documents first (Marksheet, Government ID, Authority Letter) before submitting to HoD.", 400, "documents_not_verified");
 
         // Validate that all required grade parts are filled before forwarding.
         var subjects = await _curriculum.GetByProgramAsync(profile.Program, ct);

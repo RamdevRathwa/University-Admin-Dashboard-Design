@@ -12,17 +12,20 @@ public sealed class TranscriptService : ITranscriptService
     private readonly ICurrentUserService _current;
     private readonly ITranscriptRequestRepository _requests;
     private readonly IStudentProfileService _profiles;
+    private readonly ITranscriptDocumentRepository _documents;
     private readonly IUnitOfWork _uow;
 
     public TranscriptService(
         ICurrentUserService current,
         ITranscriptRequestRepository requests,
         IStudentProfileService profiles,
+        ITranscriptDocumentRepository documents,
         IUnitOfWork uow)
     {
         _current = current;
         _requests = requests;
         _profiles = profiles;
+        _documents = documents;
         _uow = uow;
     }
 
@@ -62,6 +65,9 @@ public sealed class TranscriptService : ITranscriptService
         if (req is null || req.StudentId != _current.UserId) throw AppException.NotFound("Transcript request not found.");
         if (req.Status != TranscriptRequestStatus.Draft) throw new AppException("Only draft requests can be submitted.", 400, "invalid_status");
 
+        if (!await _documents.HasRequiredUploadsAsync(requestId, ct))
+            throw new AppException("Upload all required documents (Marksheets, Government ID, Authority Letter) before submitting transcript request.", 400, "documents_incomplete");
+
         req.Status = TranscriptRequestStatus.Submitted;
         req.CurrentStage = TranscriptStage.Clerk;
 
@@ -79,4 +85,3 @@ public sealed class TranscriptService : ITranscriptService
     private static TranscriptRequestDto Map(TranscriptRequest r) =>
         new(r.Id, r.StudentId, r.Status, r.CurrentStage, r.CreatedAt);
 }
-

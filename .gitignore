@@ -6,6 +6,9 @@ Thumbs.db
 **/Logs/
 **/*.log
 
+# File storage (generated uploads, PDFs)
+**/Storage/
+
 # Node / Vite
 **/node_modules/
 **/dist/
