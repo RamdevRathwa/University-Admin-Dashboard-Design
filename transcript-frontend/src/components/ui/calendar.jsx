@@ -37,6 +37,10 @@ export function Calendar({ selected, onSelect, disabled, className }) {
   }, [view.year, view.month]);
 
   const today = new Date();
+  const yearOptions = useMemo(() => {
+    const y = today.getFullYear();
+    return Array.from({ length: 101 }, (_, i) => y - i);
+  }, [today]);
 
   const isDisabled = (date) => {
     if (!disabled) return false;
@@ -46,14 +50,59 @@ export function Calendar({ selected, onSelect, disabled, className }) {
   return (
     <div className={cn("p-3", className)}>
       <div className="flex items-center justify-between mb-3">
-        <Button variant="ghost" size="icon" onClick={() => setView((p) => ({ year: p.month === 0 ? p.year - 1 : p.year, month: p.month === 0 ? 11 : p.month - 1 }))} aria-label="Previous month">
-          <span aria-hidden="true">‹</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() =>
+            setView((p) => ({
+              year: p.month === 0 ? p.year - 1 : p.year,
+              month: p.month === 0 ? 11 : p.month - 1,
+            }))
+          }
+          aria-label="Previous month"
+        >
+          <span aria-hidden="true">&lt;</span>
         </Button>
-        <div className="text-sm font-semibold text-gray-900">
-          {monthNames[view.month]} {view.year}
+
+        <div className="flex items-center gap-2">
+          <select
+            className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]"
+            value={view.month}
+            onChange={(e) => setView((p) => ({ ...p, month: Number(e.target.value) }))}
+            aria-label="Month"
+          >
+            {monthNames.map((m, idx) => (
+              <option key={m} value={idx}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]"
+            value={view.year}
+            onChange={(e) => setView((p) => ({ ...p, year: Number(e.target.value) }))}
+            aria-label="Year"
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setView((p) => ({ year: p.month === 11 ? p.year + 1 : p.year, month: p.month === 11 ? 0 : p.month + 1 }))} aria-label="Next month">
-          <span aria-hidden="true">›</span>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() =>
+            setView((p) => ({
+              year: p.month === 11 ? p.year + 1 : p.year,
+              month: p.month === 11 ? 0 : p.month + 1,
+            }))
+          }
+          aria-label="Next month"
+        >
+          <span aria-hidden="true">&gt;</span>
         </Button>
       </div>
 

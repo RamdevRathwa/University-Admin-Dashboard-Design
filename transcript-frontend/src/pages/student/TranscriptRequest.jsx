@@ -106,6 +106,8 @@ export default function TranscriptRequest() {
     return Array.from({ length: 25 }, (_, i) => String(currentYear - i));
   }, []);
 
+  const isValidISODate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || "").trim());
+
   const countries = useMemo(
     () => [
       { id: "IN", name: "India" },
@@ -424,19 +426,25 @@ export default function TranscriptRequest() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Date of Birth</Label>
-                      <div className="relative">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={formData.dob || ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setField("dob", v);
+                          }}
+                          aria-invalid={!!errors.dob}
+                        />
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-between">
-                              {formData.dob ? formData.dob : "Select date"}
-                              <span className="text-gray-400" aria-hidden="true">
-                                v
-                              </span>
+                            <Button type="button" variant="outline" className="shrink-0">
+                              Pick
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="p-0">
+                          <PopoverContent className="p-0" align="end">
                             <Calendar
-                              selected={formData.dob ? new Date(formData.dob) : undefined}
+                              selected={isValidISODate(formData.dob) ? new Date(formData.dob) : undefined}
                               onSelect={(d) => {
                                 if (!d) return;
                                 const today = new Date();

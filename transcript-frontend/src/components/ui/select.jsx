@@ -6,6 +6,7 @@ const SelectContext = React.createContext(null);
 export function Select({ value, defaultValue, onValueChange, disabled, children }) {
   const [internal, setInternal] = React.useState(defaultValue ?? "");
   const [open, setOpen] = React.useState(false);
+  const [labels, setLabels] = React.useState(() => new Map());
   const current = value !== undefined ? value : internal;
 
   const setValue = (v) => {
@@ -14,8 +15,26 @@ export function Select({ value, defaultValue, onValueChange, disabled, children 
     setOpen(false);
   };
 
+  const registerLabel = React.useCallback((v, label) => {
+    const key = String(v);
+    const val = String(label ?? "");
+    setLabels((prev) => {
+      const next = new Map(prev);
+      if (val) next.set(key, val);
+      return next;
+    });
+  }, []);
+
+  const getLabel = React.useCallback(
+    (v) => {
+      const key = String(v ?? "");
+      return labels.get(key) || "";
+    },
+    [labels]
+  );
+
   return (
-    <SelectContext.Provider value={{ value: current, setValue, open, setOpen, disabled: !!disabled }}>
+    <SelectContext.Provider value={{ value: current, setValue, open, setOpen, disabled: !!disabled, registerLabel, getLabel }}>
       <div className="relative">{children}</div>
     </SelectContext.Provider>
   );
@@ -44,7 +63,9 @@ export function SelectTrigger({ className, children, ...props }) {
 
 export function SelectValue({ placeholder }) {
   const ctx = React.useContext(SelectContext);
-  return <span className={cn("truncate", ctx?.value ? "text-gray-900" : "text-gray-500")}>{ctx?.value || placeholder}</span>;
+  const label = ctx?.value ? ctx?.getLabel?.(ctx.value) : "";
+  const text = label || (ctx?.value ? String(ctx.value) : "");
+  return <span className={cn("truncate", ctx?.value ? "text-gray-900" : "text-gray-500")}>{text || placeholder}</span>;
 }
 
 export function SelectContent({ className, children }) {
@@ -69,9 +90,20 @@ export function SelectContent({ className, children }) {
   );
 }
 
-export function SelectItem({ value, className, children }) {
+export function SelectItem({ value, className, children, textValue }) {
   const ctx = React.useContext(SelectContext);
   const selected = String(ctx?.value) === String(value);
+
+  React.useEffect(() => {
+    const label =
+      textValue !== undefined
+        ? String(textValue)
+        : typeof children === "string"
+          ? children
+          : "";
+    ctx?.registerLabel?.(value, label);
+  }, [ctx, value, children, textValue]);
+
   return (
     <button
       type="button"
@@ -91,4 +123,3 @@ export function SelectItem({ value, className, children }) {
     </button>
   );
 }
-
