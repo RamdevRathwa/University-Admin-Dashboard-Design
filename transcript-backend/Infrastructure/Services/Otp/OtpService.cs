@@ -16,6 +16,7 @@ public sealed class OtpService : IOtpService
     private readonly IUnitOfWork _uow;
     private readonly IEmailSender _email;
     private readonly ISmsSender _sms;
+    private readonly IUserRepository _users;
     private readonly OtpOptions _opt;
     private readonly ILogger<OtpService> _log;
 
@@ -24,6 +25,7 @@ public sealed class OtpService : IOtpService
         IUnitOfWork uow,
         IEmailSender email,
         ISmsSender sms,
+        IUserRepository users,
         IOptions<OtpOptions> options,
         ILogger<OtpService> log)
     {
@@ -31,6 +33,7 @@ public sealed class OtpService : IOtpService
         _uow = uow;
         _email = email;
         _sms = sms;
+        _users = users;
         _opt = options.Value;
         _log = log;
     }
@@ -70,7 +73,20 @@ public sealed class OtpService : IOtpService
         await _otps.AddAsync(otp, ct);
         await _uow.SaveChangesAsync(ct);
 
-        // For production, wire these senders to real providers. This default implementation logs the OTP.
+        // Dev convenience: if FixedCode is enabled and this is a staff account login,
+        // do not actually send email/SMS to avoid spamming inboxes for seeded/fake staff accounts.
+        var fixedCodeEnabled = !string.IsNullOrWhiteSpace((_opt.FixedCode ?? string.Empty).Trim());
+        if (fixedCodeEnabled && userId.HasValue)
+        {
+            var u = await _users.GetByIdAsync(userId.Value, ct);
+            if (u is not null && u.Role != UserRole.Student)
+            {
+                _log.LogInformation("OTP suppressed for staff user role={Role} purpose={Purpose} identifier={Identifier}", u.Role, purpose, id);
+                return;
+            }
+        }
+
+        // For production, wire these senders to real providers.
         if (isEmail)
         {
             await _email.SendAsync(id, "OTP Verification", $"Your OTP is {code}. It expires in {_opt.TtlSeconds / 60} minutes.", ct);
