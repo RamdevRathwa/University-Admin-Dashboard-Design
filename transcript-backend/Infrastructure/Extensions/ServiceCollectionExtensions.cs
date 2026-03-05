@@ -1,6 +1,7 @@
 using Application.Interfaces;
 using Domain.Interfaces;
 using Infrastructure.Persistence;
+using Infrastructure.Persistence.V2;
 using Infrastructure.Repositories;
 using Infrastructure.Services.Jwt;
 using Infrastructure.Services.Messaging;
@@ -24,7 +25,8 @@ public static class ServiceCollectionExtensions
         services.Configure<TranscriptStorageOptions>(config.GetSection(TranscriptStorageOptions.SectionName));
         services.Configure<DocumentStorageOptions>(config.GetSection(DocumentStorageOptions.SectionName));
 
-        services.AddDbContext<AppDbContext>(opt =>
+        // V2 DbContext (enterprise schema). All repositories are being migrated to V2.
+        services.AddDbContext<V2DbContext>(opt =>
         {
             var cs = config.GetConnectionString("DefaultConnection");
             opt.UseSqlServer(cs);
@@ -40,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStudentGradeEntryRepository, StudentGradeEntryRepository>();
         services.AddScoped<ITranscriptRepository, TranscriptRepository>();
         services.AddScoped<ITranscriptDocumentRepository, TranscriptDocumentRepository>();
+        services.AddScoped<IAdminRepository, AdminRepository>();
 
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IOtpService, OtpService>();

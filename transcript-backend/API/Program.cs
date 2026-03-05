@@ -6,12 +6,17 @@ using API.Middleware;
 using API.Services;
 using Infrastructure.Extensions;
 using Infrastructure.Services.Jwt;
+using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using FluentValidation.AspNetCore;
+using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// QuestPDF 2024+ requires explicit license selection (Community is fine for eligible use-cases).
+QuestPDF.Settings.License = LicenseType.Community;
 
 builder.Host.UseSerilog((ctx, services, cfg) =>
 {
@@ -106,5 +111,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Bootstrap minimal admin schema extensions (idempotent).
+// This keeps local dev unblocked without requiring migrations.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.V2.V2DbContext>();
+    await Infrastructure.Persistence.V2.V2Bootstrapper.EnsureAppCompatSchemaAsync(db);
+}
 
 app.Run();

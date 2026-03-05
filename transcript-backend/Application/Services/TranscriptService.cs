@@ -63,7 +63,7 @@ public sealed class TranscriptService : ITranscriptService
 
         var req = await _requests.GetByIdAsync(requestId, ct);
         if (req is null || req.StudentId != _current.UserId) throw AppException.NotFound("Transcript request not found.");
-        if (req.Status != TranscriptRequestStatus.Draft) throw new AppException("Only draft requests can be submitted.", 400, "invalid_status");
+        TranscriptStateMachine.EnsureCanSubmitByStudent(req);
 
         if (!await _documents.HasRequiredUploadsAsync(requestId, ct))
             throw new AppException("Upload all required documents (Marksheets, Government ID, Authority Letter) before submitting transcript request.", 400, "documents_incomplete");

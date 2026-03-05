@@ -75,6 +75,8 @@ public sealed class AuthService : IAuthService
             : await _users.GetByMobileAsync(otpIdentifier, ct);
 
         if (user is null) throw AppException.NotFound("Account not found. Please register first.");
+        if (user.DeletedAt is not null || !user.IsActive) throw new AppException("Account is inactive.", 403, "account_inactive");
+        if (user.Locked) throw new AppException("Account is locked.", 403, "account_locked");
 
         var purpose = isEmail ? OtpPurpose.LoginEmail : OtpPurpose.LoginMobile;
         await _otp.SendOtpAsync(otpIdentifier, purpose, user.Id, ct);
@@ -91,9 +93,15 @@ public sealed class AuthService : IAuthService
             : await _users.GetByMobileAsync(otpIdentifier, ct);
 
         if (user is null) throw AppException.NotFound("Account not found. Please register first.");
+        if (user.DeletedAt is not null || !user.IsActive) throw new AppException("Account is inactive.", 403, "account_inactive");
+        if (user.Locked) throw new AppException("Account is locked.", 403, "account_locked");
 
         var purpose = isEmail ? OtpPurpose.LoginEmail : OtpPurpose.LoginMobile;
         await _otp.VerifyOtpAsync(otpIdentifier, purpose, dto.Otp, ct);
+
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        await _users.UpdateAsync(user, ct);
+        await _uow.SaveChangesAsync(ct);
 
         var token = _jwt.GenerateToken(user);
         return new AuthResponseDto(token, MapUser(user));

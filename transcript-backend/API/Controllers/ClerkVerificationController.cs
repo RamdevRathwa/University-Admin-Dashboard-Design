@@ -1,8 +1,7 @@
 using Application.Common;
 using Application.Interfaces;
-using Domain.Entities;
 using Domain.Enums;
-using Infrastructure.Persistence;
+using Infrastructure.Persistence.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +13,10 @@ namespace API.Controllers;
 [Authorize(Roles = "Clerk,Admin")]
 public sealed class ClerkVerificationController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly V2DbContext _db;
     private readonly ICurrentUserService _current;
 
-    public ClerkVerificationController(AppDbContext db, ICurrentUserService current)
+    public ClerkVerificationController(V2DbContext db, ICurrentUserService current)
     {
         _db = db;
         _current = current;
@@ -26,35 +25,66 @@ public sealed class ClerkVerificationController : ControllerBase
     [HttpGet("pending")]
     public async Task<IActionResult> Pending([FromQuery] string? q, CancellationToken ct)
     {
-        var query = _db.TranscriptRequests
-            .AsNoTracking()
-            .Include(r => r.Student)
-            .Include(r => r.Student.StudentProfile)
-            .Include(r => r.Documents)
-            .Where(r => r.Status == TranscriptRequestStatus.Submitted && r.CurrentStage == TranscriptStage.Clerk);
-
+        var statusById = await _db.TranscriptStatuses.AsNoTracking().ToDictionaryAsync(x => x.StatusId, x => x.StatusCode, ct);
         var term = (q ?? string.Empty).Trim();
+
+        var baseQuery =
+            from r in _db.TranscriptRequests.AsNoTracking()
+            join mr in _db.MapRequests.AsNoTracking() on r.TranscriptRequestId equals mr.TranscriptRequestId
+            join s in _db.Students.AsNoTracking() on r.StudentId equals s.StudentId
+            join u in _db.Users.AsNoTracking() on s.UserId equals u.UserId
+            join prg in _db.Programs.AsNoTracking() on s.ProgramId equals prg.ProgramId into pj
+            from prg in pj.DefaultIfEmpty()
+            where r.CurrentStageRoleId == (short)UserRole.Clerk
+            orderby r.CreatedAt descending
+            select new
+            {
+                r.TranscriptRequestId,
+                legacyRequestId = mr.LegacyRequestGuid,
+                r.StatusId,
+                r.CreatedAt,
+                studentName = u.FullName,
+                email = u.Email,
+                mobile = u.Mobile,
+                prn = s.Prn,
+                program = prg != null ? prg.ProgramCode : null
+            };
+
         if (!string.IsNullOrWhiteSpace(term))
         {
-            query = query.Where(r =>
-                r.Student.FullName.Contains(term) ||
-                r.Student.Email.Contains(term) ||
-                r.Student.Mobile.Contains(term) ||
-                (r.Student.StudentProfile != null && r.Student.StudentProfile.PRN != null && r.Student.StudentProfile.PRN.Contains(term)));
+            baseQuery = baseQuery.Where(x =>
+                x.studentName.Contains(term) ||
+                (x.email != null && x.email.Contains(term)) ||
+                (x.mobile != null && x.mobile.Contains(term)) ||
+                (x.prn != null && x.prn.Contains(term)));
         }
 
-        var list = await query
-            .OrderByDescending(r => r.CreatedAt)
-            .Take(200)
-            .ToListAsync(ct);
+        var list = await baseQuery.Take(200).ToListAsync(ct);
+
+        // Load docs for these requests
+        var reqIds = list.Select(x => x.TranscriptRequestId).Distinct().ToList();
+        var docs = reqIds.Count == 0
+            ? new List<Infrastructure.Persistence.V2.Entities.V2TranscriptRequestDocument>()
+            : await _db.TranscriptRequestDocuments.AsNoTracking()
+                .Where(d => reqIds.Contains(d.TranscriptRequestId))
+                .ToListAsync(ct);
+
+        var docsByReq = docs.GroupBy(d => d.TranscriptRequestId).ToDictionary(g => g.Key, g => g.ToList());
 
         var shaped = list
+            .Where(r =>
+            {
+                var sc = statusById.TryGetValue(r.StatusId, out var s) ? s : "Draft";
+                return sc == "Submitted" || sc == "GradeEntry" || sc == "ReturnedToClerk";
+            })
             .Select(r =>
             {
-                var docs = r.Documents ?? new List<TranscriptDocument>();
-                var pending = docs.Count(d => d.Status == TranscriptDocumentStatus.Pending);
-                var returned = docs.Count(d => d.Status == TranscriptDocumentStatus.Returned);
-                var approved = docs.Count(d => d.Status == TranscriptDocumentStatus.Approved);
+                docsByReq.TryGetValue(r.TranscriptRequestId, out var dlist);
+                dlist ??= new List<Infrastructure.Persistence.V2.Entities.V2TranscriptRequestDocument>();
+
+                var pending = dlist.Count(d => d.StatusCode == "Pending");
+                var returned = dlist.Count(d => d.StatusCode == "Returned");
+                var approved = dlist.Count(d => d.StatusCode == "Approved");
 
                 var overall =
                     returned > 0 ? "Returned" :
@@ -63,24 +93,24 @@ public sealed class ClerkVerificationController : ControllerBase
 
                 return new
                 {
-                    requestId = r.Id,
+                    requestId = r.legacyRequestId,
                     createdAt = r.CreatedAt,
                     status = overall,
                     student = new
                     {
-                        id = r.StudentId,
-                        name = r.Student.FullName,
-                        email = r.Student.Email,
-                        mobile = r.Student.Mobile,
-                        prn = r.Student.StudentProfile?.PRN,
-                        program = r.Student.StudentProfile?.Program,
-                        department = r.Student.StudentProfile?.Department,
-                        faculty = r.Student.StudentProfile?.Faculty
+                        id = (Guid?)null, // client doesn't need student guid here
+                        name = r.studentName,
+                        email = r.email,
+                        mobile = r.mobile,
+                        prn = r.prn,
+                        program = r.program,
+                        department = (string?)null,
+                        faculty = (string?)null
                     },
-                    counts = new { pending, returned, approved, total = docs.Count }
+                    counts = new { pending, returned, approved, total = dlist.Count }
                 };
             })
-            .Where(x => x.counts.pending > 0 || x.counts.returned > 0) // needs clerk action
+            .Where(x => x.counts.pending > 0 || x.counts.returned > 0)
             .ToList();
 
         return Ok(shaped);
@@ -89,53 +119,58 @@ public sealed class ClerkVerificationController : ControllerBase
     [HttpGet("{requestId:guid}")]
     public async Task<IActionResult> Review(Guid requestId, CancellationToken ct)
     {
-        var r = await _db.TranscriptRequests
-            .AsNoTracking()
-            .Include(x => x.Student)
-            .Include(x => x.Student.StudentProfile)
-            .Include(x => x.Documents)
-            .FirstOrDefaultAsync(x => x.Id == requestId, ct);
+        var mr = await _db.MapRequests.AsNoTracking().FirstOrDefaultAsync(x => x.LegacyRequestGuid == requestId, ct);
+        if (mr is null) throw AppException.NotFound("Transcript request not found.");
 
+        var r = await _db.TranscriptRequests.AsNoTracking().FirstOrDefaultAsync(x => x.TranscriptRequestId == mr.TranscriptRequestId, ct);
         if (r is null) throw AppException.NotFound("Transcript request not found.");
 
-        if (r.Status != TranscriptRequestStatus.Submitted || r.CurrentStage != TranscriptStage.Clerk)
+        if (r.CurrentStageRoleId != (short)UserRole.Clerk)
             throw new AppException("Only clerk-stage submitted requests can be verified.", 400, "invalid_stage");
 
-        var docs = (r.Documents ?? new List<TranscriptDocument>())
+        var docs = await _db.TranscriptRequestDocuments.AsNoTracking()
+            .Where(d => d.TranscriptRequestId == r.TranscriptRequestId)
             .OrderByDescending(d => d.UploadedAt)
             .Select(d => new
             {
-                id = d.Id,
+                id = d.LegacyDocumentGuid,
                 type = d.DocumentType,
-                status = d.Status,
+                status = d.StatusCode,
                 fileName = d.FileName,
                 sizeBytes = d.SizeBytes,
                 uploadedAt = d.UploadedAt,
                 verifiedAt = d.VerifiedAt,
                 remarks = d.Remarks
             })
-            .ToList();
+            .ToListAsync(ct);
+
+        var s = await _db.Students.AsNoTracking().FirstOrDefaultAsync(x => x.StudentId == r.StudentId, ct);
+        var u = s is null ? null : await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == s.UserId, ct);
+        var prg = s?.ProgramId is null ? null : await _db.Programs.AsNoTracking().FirstOrDefaultAsync(x => x.ProgramId == s.ProgramId.Value, ct);
+        var dept = prg is null ? null : await _db.Departments.AsNoTracking().FirstOrDefaultAsync(x => x.DepartmentId == prg.DepartmentId, ct);
+        var fac = dept is null ? null : await _db.Faculties.AsNoTracking().FirstOrDefaultAsync(x => x.FacultyId == dept.FacultyId, ct);
+        var sp = s is null ? null : await _db.StudentProfiles.AsNoTracking().FirstOrDefaultAsync(x => x.StudentId == s.StudentId, ct);
 
         return Ok(new
         {
-            requestId = r.Id,
+            requestId,
             createdAt = r.CreatedAt,
             student = new
             {
-                id = r.StudentId,
-                name = r.Student.FullName,
-                email = r.Student.Email,
-                mobile = r.Student.Mobile,
-                prn = r.Student.StudentProfile?.PRN,
-                faculty = r.Student.StudentProfile?.Faculty,
-                department = r.Student.StudentProfile?.Department,
-                program = r.Student.StudentProfile?.Program,
-                admissionYear = r.Student.StudentProfile?.AdmissionYear,
-                graduationYear = r.Student.StudentProfile?.GraduationYear,
-                nationality = r.Student.StudentProfile?.Nationality,
-                dob = r.Student.StudentProfile?.DOB,
-                birthPlace = r.Student.StudentProfile?.BirthPlace,
-                address = r.Student.StudentProfile?.Address
+                id = (Guid?)null,
+                name = u?.FullName,
+                email = u?.Email,
+                mobile = u?.Mobile,
+                prn = s?.Prn,
+                faculty = fac?.FacultyName,
+                department = dept?.DeptName,
+                program = prg?.ProgramCode,
+                admissionYear = (int?)null,
+                graduationYear = (int?)null,
+                nationality = sp?.Nationality,
+                dob = sp?.DateOfBirthRaw is null ? (DateOnly?)null : DateOnly.FromDateTime(sp.DateOfBirthRaw.Value),
+                birthPlace = sp?.BirthPlace,
+                address = sp?.PermanentAddress
             },
             documents = docs
         });
@@ -144,34 +179,37 @@ public sealed class ClerkVerificationController : ControllerBase
     [HttpPost("{requestId:guid}/approve")]
     public async Task<IActionResult> Approve(Guid requestId, [FromBody] VerificationDecisionDto? dto, CancellationToken ct)
     {
-        var r = await _db.TranscriptRequests
-            .Include(x => x.Documents)
-            .FirstOrDefaultAsync(x => x.Id == requestId, ct);
+        var mr = await _db.MapRequests.FirstOrDefaultAsync(x => x.LegacyRequestGuid == requestId, ct);
+        if (mr is null) throw AppException.NotFound("Transcript request not found.");
 
-        if (r is null) throw AppException.NotFound("Transcript request not found.");
-        if (r.Status != TranscriptRequestStatus.Submitted || r.CurrentStage != TranscriptStage.Clerk)
+        var req = await _db.TranscriptRequests.FirstOrDefaultAsync(x => x.TranscriptRequestId == mr.TranscriptRequestId, ct);
+        if (req is null) throw AppException.NotFound("Transcript request not found.");
+
+        if (req.CurrentStageRoleId != (short)UserRole.Clerk)
             throw new AppException("Only clerk-stage submitted requests can be verified.", 400, "invalid_stage");
 
-        var docs = r.Documents ?? new List<TranscriptDocument>();
+        var docs = await _db.TranscriptRequestDocuments.Where(d => d.TranscriptRequestId == req.TranscriptRequestId).ToListAsync(ct);
         if (docs.Count == 0) throw new AppException("No documents uploaded for this request.", 400, "documents_missing");
+
+        var now = DateTimeOffset.UtcNow;
+        var actor = await ResolveActorUserIdAsync(ct);
 
         foreach (var d in docs)
         {
-            d.Status = TranscriptDocumentStatus.Approved;
-            d.VerifiedBy = _current.UserId;
-            d.VerifiedAt = DateTimeOffset.UtcNow;
+            d.StatusCode = "Approved";
+            d.VerifiedBy = actor;
+            d.VerifiedAt = now;
             d.Remarks = null;
         }
 
-        await _db.TranscriptApprovals.AddAsync(new TranscriptApproval
+        await _db.TranscriptApprovals.AddAsync(new Infrastructure.Persistence.V2.Entities.V2TranscriptApproval
         {
-            Id = Guid.NewGuid(),
-            TranscriptRequestId = r.Id,
-            Role = UserRole.Clerk,
-            ApprovedBy = _current.UserId,
-            Action = ApprovalAction.Approve,
+            TranscriptRequestId = req.TranscriptRequestId,
+            RoleId = (short)UserRole.Clerk,
+            ActedByUserId = actor,
+            ActionCode = "Approve",
             Remarks = (dto?.Remarks ?? string.Empty).Trim(),
-            ActionAt = DateTimeOffset.UtcNow
+            ActedAt = now
         }, ct);
 
         await _db.SaveChangesAsync(ct);
@@ -185,38 +223,48 @@ public sealed class ClerkVerificationController : ControllerBase
         if (string.IsNullOrWhiteSpace(remarks))
             throw new AppException("Remarks are required.", 400, "remarks_required");
 
-        var r = await _db.TranscriptRequests
-            .Include(x => x.Documents)
-            .FirstOrDefaultAsync(x => x.Id == requestId, ct);
+        var mr = await _db.MapRequests.FirstOrDefaultAsync(x => x.LegacyRequestGuid == requestId, ct);
+        if (mr is null) throw AppException.NotFound("Transcript request not found.");
 
-        if (r is null) throw AppException.NotFound("Transcript request not found.");
-        if (r.Status != TranscriptRequestStatus.Submitted || r.CurrentStage != TranscriptStage.Clerk)
+        var req = await _db.TranscriptRequests.FirstOrDefaultAsync(x => x.TranscriptRequestId == mr.TranscriptRequestId, ct);
+        if (req is null) throw AppException.NotFound("Transcript request not found.");
+
+        if (req.CurrentStageRoleId != (short)UserRole.Clerk)
             throw new AppException("Only clerk-stage submitted requests can be verified.", 400, "invalid_stage");
 
-        var docs = r.Documents ?? new List<TranscriptDocument>();
+        var docs = await _db.TranscriptRequestDocuments.Where(d => d.TranscriptRequestId == req.TranscriptRequestId).ToListAsync(ct);
         if (docs.Count == 0) throw new AppException("No documents uploaded for this request.", 400, "documents_missing");
+
+        var now = DateTimeOffset.UtcNow;
+        var actor = await ResolveActorUserIdAsync(ct);
 
         foreach (var d in docs)
         {
-            d.Status = TranscriptDocumentStatus.Returned;
-            d.VerifiedBy = _current.UserId;
-            d.VerifiedAt = DateTimeOffset.UtcNow;
+            d.StatusCode = "Returned";
+            d.VerifiedBy = actor;
+            d.VerifiedAt = now;
             d.Remarks = remarks;
         }
 
-        await _db.TranscriptApprovals.AddAsync(new TranscriptApproval
+        await _db.TranscriptApprovals.AddAsync(new Infrastructure.Persistence.V2.Entities.V2TranscriptApproval
         {
-            Id = Guid.NewGuid(),
-            TranscriptRequestId = r.Id,
-            Role = UserRole.Clerk,
-            ApprovedBy = _current.UserId,
-            Action = ApprovalAction.Reject,
+            TranscriptRequestId = req.TranscriptRequestId,
+            RoleId = (short)UserRole.Clerk,
+            ActedByUserId = actor,
+            ActionCode = "Reject",
             Remarks = remarks,
-            ActionAt = DateTimeOffset.UtcNow
+            ActedAt = now
         }, ct);
 
         await _db.SaveChangesAsync(ct);
         return Ok(new { ok = true });
+    }
+
+    private async Task<long> ResolveActorUserIdAsync(CancellationToken ct)
+    {
+        var mu = await _db.MapUsers.AsNoTracking().FirstOrDefaultAsync(x => x.LegacyUserGuid == _current.UserId, ct);
+        if (mu is not null) return mu.UserId;
+        return await _db.Users.AsNoTracking().Select(x => x.UserId).FirstAsync(ct);
     }
 
     public sealed class VerificationDecisionDto
@@ -224,4 +272,3 @@ public sealed class ClerkVerificationController : ControllerBase
         public string? Remarks { get; set; }
     }
 }
-

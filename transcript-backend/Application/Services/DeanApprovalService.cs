@@ -70,11 +70,26 @@ public sealed class DeanApprovalService : IDeanApprovalService
         EnsureDean();
         var req = await _requests.GetByIdAsync(requestId, ct);
         if (req is null) throw AppException.NotFound("Transcript request not found.");
-        if (req.Status != TranscriptRequestStatus.ForwardedToDean || req.CurrentStage != TranscriptStage.Dean)
-            throw new AppException("Only requests forwarded to Dean can be approved.", 400, "invalid_status");
 
         var existing = await _transcripts.GetByRequestIdAsync(req.Id, ct);
-        if (existing is not null) throw new AppException("Transcript already generated for this request.", 400, "already_generated");
+        if (existing is not null)
+        {
+            // Recovery path: transcript was created but PDF generation failed (e.g., runtime dependency issues).
+            if (string.IsNullOrWhiteSpace((existing.PdfPath ?? string.Empty).Trim()))
+            {
+                var (pdfPath, verification) = await _pdf.GeneratePdfAsync(existing.Id, ct);
+                existing.PdfPath = pdfPath;
+                await _transcripts.UpdateAsync(existing, ct);
+                await _uow.SaveChangesAsync(ct);
+                _ = verification;
+                return existing.Id;
+            }
+
+            throw new AppException("Transcript already generated for this request.", 400, "already_generated");
+        }
+
+        if (req.Status != TranscriptRequestStatus.ForwardedToDean || req.CurrentStage != TranscriptStage.Dean)
+            throw new AppException("Only requests forwarded to Dean can be approved.", 400, "invalid_status");
 
         var student = await _users.GetByIdAsync(req.StudentId, ct);
         if (student is null) throw AppException.NotFound("Student not found.");

@@ -61,9 +61,8 @@ public sealed class StudentDocumentsController : ControllerBase
         var req = await _requests.GetByIdAsync(requestId, ct);
         if (req is null || req.StudentId != _current.UserId) throw AppException.NotFound("Transcript request not found.");
 
-        // Student can upload while request is Draft or still at Clerk stage (returned/pending docs).
-        if (req.Status != TranscriptRequestStatus.Draft && req.CurrentStage != TranscriptStage.Clerk)
-            throw new AppException("Documents cannot be modified at this stage.", 400, "documents_locked");
+        // Student can upload while request is Draft/Student or Submitted/Clerk (returned/pending docs).
+        TranscriptStateMachine.EnsureEditableByStudent(req);
 
         if (files is null || files.Count == 0)
             throw new AppException("No files provided.", 400, "files_required");
@@ -104,4 +103,3 @@ public sealed class StudentDocumentsController : ControllerBase
         return Ok(new { uploaded = docs.Count });
     }
 }
-

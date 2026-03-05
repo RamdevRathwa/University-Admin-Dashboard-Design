@@ -10,10 +10,10 @@ import ProtectedRoute from "../components/ProtectedRoute";
 
 // Layouts
 import StudentLayout from "../layouts/StudentLayout";
-import DashboardLayout from "../layouts/DashboardLayout";
 import ClerkLayout from "../layouts/ClerkLayout";
 import HodLayout from "../layouts/HodLayout";
 import DeanLayout from "../layouts/DeanLayout";
+import AdminLayout from "../layouts/AdminLayout";
 
 // Student Pages
 import DashboardHome from "../pages/student/DashboardHome";
@@ -40,6 +40,18 @@ import HodReviewPage from "../pages/hod/HodReviewPage";
 import DeanDashboardHome from "../pages/dean/DeanDashboardHome";
 import DeanPendingApprovals from "../pages/dean/DeanPendingApprovals";
 import DeanReviewPage from "../pages/dean/DeanReviewPage";
+
+// Admin Pages
+import AdminDashboardHome from "../pages/admin/AdminDashboardHome";
+import UserManagement from "../pages/admin/UserManagement";
+import RoleManagement from "../pages/admin/RoleManagement";
+import FacultyManagement from "../pages/admin/FacultyManagement";
+import ProgramCurriculum from "../pages/admin/ProgramCurriculum";
+import GradingScheme from "../pages/admin/GradingScheme";
+import TranscriptRecords from "../pages/admin/TranscriptRecords";
+import PaymentsPage from "../pages/admin/PaymentsPage";
+import AuditLogsPage from "../pages/admin/AuditLogsPage";
+import SystemSettings from "../pages/admin/SystemSettings";
 
 function PublicRoute({ children }) {
   const { isAuthenticated, userRole } = useAuth();
@@ -162,11 +174,20 @@ export default function AppRoutes() {
           path="/admin"
           element={
             <ProtectedRoute requiredRole="Admin">
-              <DashboardLayout />
+              <AdminLayout />
             </ProtectedRoute>
           }
         >
-          <Route index element={<div className="p-6"><h1 className="text-2xl font-bold">Admin Dashboard</h1></div>} />
+          <Route index element={<AdminDashboardHome />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="roles" element={<RoleManagement />} />
+          <Route path="faculty" element={<FacultyManagement />} />
+          <Route path="curriculum" element={<ProgramCurriculum />} />
+          <Route path="grading" element={<GradingScheme />} />
+          <Route path="transcripts" element={<TranscriptRecords />} />
+          <Route path="payments" element={<PaymentsPage />} />
+          <Route path="audit" element={<AuditLogsPage />} />
+          <Route path="settings" element={<SystemSettings />} />
         </Route>
 
         {/* ---------- 404 ---------- */}

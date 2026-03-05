@@ -1,6 +1,6 @@
 using Domain.Enums;
 using Domain.Interfaces;
-using Infrastructure.Persistence;
+using Infrastructure.Persistence.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,9 +12,10 @@ namespace API.Controllers;
 [Authorize(Roles = "Clerk,Admin")]
 public sealed class ClerkDashboardController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly V2DbContext _db;
     private readonly ITranscriptDocumentRepository _docs;
-    public ClerkDashboardController(AppDbContext db, ITranscriptDocumentRepository docs)
+
+    public ClerkDashboardController(V2DbContext db, ITranscriptDocumentRepository docs)
     {
         _db = db;
         _docs = docs;
@@ -26,23 +27,30 @@ public sealed class ClerkDashboardController : ControllerBase
         var now = DateTimeOffset.UtcNow;
         var from = now.Date.AddDays(-6);
 
-        var requests = await _db.TranscriptRequests
-            .AsNoTracking()
-            .Include(x => x.Approvals)
+        var statusById = await _db.TranscriptStatuses.AsNoTracking().ToDictionaryAsync(x => x.StatusId, x => x.StatusCode, ct);
+
+        var requests = await _db.TranscriptRequests.AsNoTracking()
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(2000)
             .ToListAsync(ct);
 
-        var clerkQueue = requests.Count(x => x.Status == TranscriptRequestStatus.Submitted && x.CurrentStage == TranscriptStage.Clerk);
-        var forwardedToHod = requests.Count(x => x.Status == TranscriptRequestStatus.ForwardedToHoD && x.CurrentStage == TranscriptStage.HoD);
-
-        // Returned to clerk is modeled as Status=Submitted + Stage=Clerk, with last approval Reject by HoD.
-        var returnedToClerk = requests.Count(x =>
+        var clerkQueue = requests.Count(x =>
         {
-            if (x.Status != TranscriptRequestStatus.Submitted || x.CurrentStage != TranscriptStage.Clerk) return false;
-            var last = x.Approvals.OrderByDescending(a => a.ActionAt).FirstOrDefault();
-            return last is not null && last.Role == UserRole.HoD && last.Action == ApprovalAction.Reject;
+            var sc = statusById.TryGetValue(x.StatusId, out var s) ? s : "Draft";
+            return (sc == "Submitted" || sc == "GradeEntry" || sc == "ReturnedToClerk") && x.CurrentStageRoleId == (short)UserRole.Clerk;
         });
 
-        var rejected = requests.Count(x => x.Status == TranscriptRequestStatus.Rejected);
+        var forwardedToHod = requests.Count(x =>
+        {
+            var sc = statusById.TryGetValue(x.StatusId, out var s) ? s : "Draft";
+            return sc == "ForwardedToHoD" && x.CurrentStageRoleId == (short)UserRole.HoD;
+        });
+
+        var rejected = requests.Count(x =>
+        {
+            var sc = statusById.TryGetValue(x.StatusId, out var s) ? s : "Draft";
+            return sc == "Rejected";
+        });
 
         var daily = requests
             .Where(x => x.CreatedAt >= from)
@@ -60,15 +68,23 @@ public sealed class ClerkDashboardController : ControllerBase
 
         var activitiesRaw = await _db.TranscriptApprovals
             .AsNoTracking()
-            .OrderByDescending(x => x.ActionAt)
+            .OrderByDescending(x => x.ActedAt)
             .Take(10)
             .ToListAsync(ct);
 
-        var activities = activitiesRaw.Select(a => new
+        var requestNoById = await _db.TranscriptRequests.AsNoTracking()
+            .Where(r => activitiesRaw.Select(a => a.TranscriptRequestId).Contains(r.TranscriptRequestId))
+            .ToDictionaryAsync(r => r.TranscriptRequestId, r => r.RequestNo, ct);
+
+        var activities = activitiesRaw.Select(a =>
         {
-            id = a.Id,
-            text = $"{a.Role} {a.Action} (Request {a.TranscriptRequestId})",
-            at = a.ActionAt,
+            requestNoById.TryGetValue(a.TranscriptRequestId, out var reqNo);
+            return new
+            {
+                id = a.TranscriptApprovalId,
+                text = $"{(UserRole)a.RoleId} {a.ActionCode} ({reqNo ?? a.TranscriptRequestId.ToString()})",
+                at = a.ActedAt,
+            };
         }).ToList();
 
         var pendingVerifications = await _docs.CountPendingVerificationsAsync(ct);
@@ -78,7 +94,7 @@ public sealed class ClerkDashboardController : ControllerBase
             stats = new
             {
                 pendingVerifications,
-                pendingGradeEntry = clerkQueue + returnedToClerk,
+                pendingGradeEntry = clerkQueue,
                 forwardedToHod,
                 rejectedRequests = rejected
             },
@@ -87,3 +103,4 @@ public sealed class ClerkDashboardController : ControllerBase
         });
     }
 }
+

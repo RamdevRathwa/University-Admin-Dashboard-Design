@@ -19,6 +19,15 @@ public sealed class AppDbContext : DbContext
     public DbSet<TranscriptSubjectSnapshot> TranscriptSubjectSnapshots => Set<TranscriptSubjectSnapshot>();
     public DbSet<TranscriptDocument> TranscriptDocuments => Set<TranscriptDocument>();
 
+    // Admin module (V1 extensions)
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Faculty> Faculties => Set<Faculty>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Domain.Entities.Program> Programs => Set<Domain.Entities.Program>();
+    public DbSet<CurriculumVersion> CurriculumVersions => Set<CurriculumVersion>();
+    public DbSet<GradingScheme> GradingSchemes => Set<GradingScheme>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -29,6 +38,8 @@ public sealed class AppDbContext : DbContext
             b.Property(x => x.FullName).HasMaxLength(120).IsRequired();
             b.Property(x => x.Email).HasMaxLength(254).IsRequired();
             b.Property(x => x.Mobile).HasMaxLength(20).IsRequired();
+            b.Property(x => x.IsActive).HasDefaultValue(true);
+            b.Property(x => x.Locked).HasDefaultValue(false);
             b.HasIndex(x => x.Email).IsUnique();
             b.HasIndex(x => x.Mobile).IsUnique();
 
@@ -70,6 +81,74 @@ public sealed class AppDbContext : DbContext
                 .HasForeignKey(x => x.StudentId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(x => new { x.StudentId, x.Status, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<SystemSetting>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.SettingKey).HasMaxLength(120).IsRequired();
+            b.Property(x => x.SettingValue).HasColumnType("nvarchar(max)").IsRequired();
+            b.HasIndex(x => x.SettingKey).IsUnique();
+        });
+
+        modelBuilder.Entity<AuditLog>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.UserLabel).HasMaxLength(200).IsRequired();
+            b.Property(x => x.ActionType).HasMaxLength(50).IsRequired();
+            b.Property(x => x.EntityName).HasMaxLength(120).IsRequired();
+            b.Property(x => x.RecordId).HasMaxLength(80);
+            b.Property(x => x.IpAddress).HasMaxLength(45);
+            b.Property(x => x.UserAgent).HasMaxLength(500);
+            b.Property(x => x.OldValue).HasColumnType("nvarchar(max)");
+            b.Property(x => x.NewValue).HasColumnType("nvarchar(max)");
+            b.HasIndex(x => x.CreatedAt);
+            b.HasIndex(x => new { x.ActionType, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<Faculty>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            b.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            b.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<Department>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            b.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            b.HasIndex(x => new { x.FacultyId, x.Code }).IsUnique();
+            b.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Domain.Entities.Program>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            b.Property(x => x.Name).HasMaxLength(255).IsRequired();
+            b.Property(x => x.DegreeName).HasMaxLength(120).IsRequired();
+            b.HasIndex(x => x.Code).IsUnique();
+            b.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CurriculumVersion>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.AcademicYear).HasMaxLength(20).IsRequired();
+            b.Property(x => x.VersionName).HasMaxLength(40).IsRequired();
+            b.HasIndex(x => new { x.ProgramId, x.AcademicYear, x.VersionName }).IsUnique();
+            b.HasOne(x => x.Program).WithMany().HasForeignKey(x => x.ProgramId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GradingScheme>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.SchemeName).HasMaxLength(120).IsRequired();
+            b.Property(x => x.SchemeType).HasMaxLength(40).IsRequired();
+            b.Property(x => x.MaxGradePoint).HasPrecision(4, 2);
+            b.HasIndex(x => x.SchemeName).IsUnique();
         });
 
         modelBuilder.Entity<TranscriptDocument>(b =>

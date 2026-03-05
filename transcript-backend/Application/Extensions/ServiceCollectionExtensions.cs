@@ -15,8 +15,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IClerkGradeEntryService, ClerkGradeEntryService>();
         services.AddScoped<IClerkWorkflowService, ClerkWorkflowService>();
         services.AddScoped<IHodWorkflowService, HodWorkflowService>();
+        services.AddScoped<IHodReviewService, HodReviewService>();
         services.AddScoped<IDeanApprovalService, DeanApprovalService>();
         services.AddScoped<IStudentTranscriptService, StudentTranscriptService>();
+        services.AddScoped<IAdminService, AdminService>();
 
         services.AddValidatorsFromAssembly(typeof(ServiceCollectionExtensions).Assembly);
         return services;

@@ -3,6 +3,14 @@ import { cn } from "../../lib/utils";
 
 const SelectContext = React.createContext(null);
 
+function extractText(node) {
+  if (node === null || node === undefined || node === false) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (React.isValidElement(node)) return extractText(node.props?.children);
+  return "";
+}
+
 export function Select({ value, defaultValue, onValueChange, disabled, children }) {
   const [internal, setInternal] = React.useState(defaultValue ?? "");
   const [open, setOpen] = React.useState(false);
@@ -82,9 +90,13 @@ export function SelectContent({ className, children }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [ctx?.open, ctx]);
 
-  if (!ctx?.open) return null;
   return (
-    <div ref={ref} className={cn("absolute z-[95] mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden", className)}>
+    // Keep mounted even when closed so SelectItem effects can register labels.
+    <div
+      ref={ref}
+      hidden={!ctx?.open}
+      className={cn("absolute z-[95] mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden", className)}
+    >
       <div className="max-h-60 overflow-auto p-1">{children}</div>
     </div>
   );
@@ -95,12 +107,7 @@ export function SelectItem({ value, className, children, textValue }) {
   const selected = String(ctx?.value) === String(value);
 
   React.useEffect(() => {
-    const label =
-      textValue !== undefined
-        ? String(textValue)
-        : typeof children === "string"
-          ? children
-          : "";
+    const label = (textValue !== undefined ? String(textValue) : extractText(children)).trim();
     ctx?.registerLabel?.(value, label);
   }, [ctx, value, children, textValue]);
 

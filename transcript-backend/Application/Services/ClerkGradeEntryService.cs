@@ -40,6 +40,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
 
     public async Task<GradeEntryResponseDto> GetByPrnAsync(string prn, CancellationToken ct = default)
     {
+        EnsureClerk();
+
         var rawPrn = (prn ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(rawPrn)) throw new AppException("PRN is required.", 400, "prn_required");
 
@@ -117,6 +119,13 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var student = await _profiles.GetUserByPrnAsync(rawPrn, ct);
         if (student is null) throw AppException.NotFound("Student not found for this PRN.");
 
+        // Enforce workflow: grades are editable only when there's an active clerk-stage submitted request.
+        var requests = await _requests.GetByStudentIdAsync(student.Id, ct);
+        var req = requests.FirstOrDefault(x => x.Status == TranscriptRequestStatus.Submitted && x.CurrentStage == TranscriptStage.Clerk);
+        if (req is null)
+            throw new AppException("No clerk-stage submitted transcript request found for this student. Ask student to submit transcript request first.", 400, "request_missing");
+        TranscriptStateMachine.EnsureClerkCanEditGrades(req);
+
         var profile = student.StudentProfile!;
         if (string.IsNullOrWhiteSpace(profile.Program))
             throw new AppException("Student profile does not have Program set.", 400, "profile_program_missing");
@@ -126,6 +135,10 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
             throw new AppException($"No curriculum found for program '{profile.Program}'.", 400, "curriculum_missing");
 
         var allowedIds = subjects.Select(x => x.Id).ToHashSet();
+
+        // Once clerk starts saving grades, move the request into GradeEntry state (V2) via repository mapping.
+        // This enables the enforced state machine path: Submitted -> GradeEntry -> ForwardedToHoD.
+        await _requests.UpdateAsync(req, ct);
 
         foreach (var item in dto.Items ?? Array.Empty<GradeEntryUpsertDto>())
         {
