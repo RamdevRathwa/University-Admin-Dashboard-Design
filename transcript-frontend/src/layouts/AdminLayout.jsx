@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { name: "Dashboard", path: "/admin", icon: LayoutDashboard, end: true },
+  { name: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, end: true },
   { name: "User Management", path: "/admin/users", icon: Users },
   { name: "Role Management", path: "/admin/roles", icon: Shield },
   { name: "Faculty & Departments", path: "/admin/faculty", icon: Building2 },
@@ -42,6 +42,7 @@ export default function AdminLayout() {
 
   const pageTitle = useMemo(() => {
     const p = location.pathname;
+    if (p === "/admin" || p.startsWith("/admin/dashboard")) return "Dashboard";
     if (p.startsWith("/admin/users")) return "User Management";
     if (p.startsWith("/admin/roles")) return "Role Management";
     if (p.startsWith("/admin/faculty")) return "Faculty & Department Management";
@@ -111,4 +112,3 @@ export default function AdminLayout() {
     </div>
   );
 }
-

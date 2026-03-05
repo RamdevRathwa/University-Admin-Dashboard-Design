@@ -62,7 +62,7 @@ function PublicRoute({ children }) {
       Clerk: '/clerk/dashboard',
       HoD: '/hod',
       Dean: '/dean',
-      Admin: '/admin'
+      Admin: '/admin/dashboard'
     };
     return <Navigate to={roleRoutes[userRole] || '/dashboard'} replace />;
   }
@@ -178,7 +178,8 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<AdminDashboardHome />} />
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboardHome />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="roles" element={<RoleManagement />} />
           <Route path="faculty" element={<FacultyManagement />} />
