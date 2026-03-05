@@ -174,7 +174,7 @@ export default function StudentLayout() {
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 sm:p-6 lg:p-8">
             <Card className="border-0 shadow-none bg-transparent">
-              <Outlet />
+              <Outlet key={location.pathname} />
             </Card>
           </div>
         </main>

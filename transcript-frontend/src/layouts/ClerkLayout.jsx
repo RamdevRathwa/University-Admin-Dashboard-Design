@@ -50,7 +50,7 @@ export default function ClerkLayout() {
         />
         <main className="flex-1 overflow-y-auto bg-gray-100">
           <div className="p-4 sm:p-6 lg:p-8 animate-fadeIn">
-            <Outlet />
+            <Outlet key={location.pathname} />
           </div>
         </main>
       </div>
