@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import universityLogo from "../assets/university-logo.png";
 import { Button } from "../components/ui/button";
 import { Sheet, SheetTrigger, SheetContent } from "../components/ui/sheet";
@@ -9,12 +10,13 @@ import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Card } from "../components/ui/card";
-import { Menu, Bell, LayoutDashboard, User, FilePlus, Clock, CreditCard, Download } from "lucide-react";
+import { Menu, Bell, Moon, Sun, LayoutDashboard, User, FilePlus, Clock, CreditCard, Download } from "lucide-react";
 
 export default function StudentLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout: authLogout, user } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -69,16 +71,20 @@ export default function StudentLayout() {
   );
 
   return (
-    <div className="flex min-h-screen bg-gray-100 text-gray-900">
-      <aside className={`hidden lg:flex bg-white border-r border-gray-200 sticky top-0 h-screen ${collapsed ? "w-20" : "w-72"} transition-all`}>
+    <div className="flex min-h-screen bg-gray-100 dark:bg-slate-950 text-gray-900 dark:text-slate-100">
+      <aside
+        className={`hidden lg:flex bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 sticky top-0 h-screen ${
+          collapsed ? "w-20" : "w-72"
+        } transition-all`}
+      >
         <div className="flex flex-col w-full">
-          <div className="p-4 border-b border-gray-200">
+          <div className="p-4 border-b border-gray-200 dark:border-slate-800">
             <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
               <img src={universityLogo} alt="Maharaja Sayajirao University of Baroda" className="h-10 w-10 object-contain" />
               {collapsed ? null : (
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">Maharaja Sayajirao University of Baroda</p>
-                  <p className="text-xs text-gray-500">Student Transcript Portal</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">Maharaja Sayajirao University of Baroda</p>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Student Transcript Portal</p>
                 </div>
               )}
             </div>
@@ -97,7 +103,7 @@ export default function StudentLayout() {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="bg-white border-b border-gray-200">
+        <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800">
           <div className="px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -111,8 +117,8 @@ export default function StudentLayout() {
                   <div className="flex items-center gap-3 mb-4">
                     <img src={universityLogo} alt="Maharaja Sayajirao University of Baroda" className="h-10 w-10 object-contain" />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">Maharaja Sayajirao University of Baroda</p>
-                      <p className="text-xs text-gray-500">Student Transcript Portal</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">Maharaja Sayajirao University of Baroda</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Student Transcript Portal</p>
                     </div>
                   </div>
                   <Separator className="mb-4" />
@@ -121,12 +127,23 @@ export default function StudentLayout() {
               </Sheet>
 
               <div className="min-w-0">
-                <h1 className="text-lg font-semibold text-gray-900 truncate">{pageTitle}</h1>
-                <p className="text-xs text-gray-500 truncate">Maharaja Sayajirao University of Baroda</p>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-slate-100 truncate">{pageTitle}</h1>
+                <p className="text-xs text-gray-500 dark:text-slate-400 truncate">Maharaja Sayajirao University of Baroda</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                className="relative"
+                type="button"
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                onClick={toggleTheme}
+              >
+                {isDark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+              </Button>
+
               <Button variant="outline" size="icon" className="relative">
                 <span className="sr-only">Notifications</span>
                 <Bell className="h-4 w-4" aria-hidden="true" />
@@ -146,8 +163,8 @@ export default function StudentLayout() {
                       <AvatarFallback>{String(studentName).charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <span className="hidden sm:block text-left ml-2">
-                      <span className="block text-sm font-medium text-gray-900 leading-none">{studentName}</span>
-                      <span className="block text-xs text-gray-500 mt-1 leading-none">Student</span>
+                      <span className="block text-sm font-medium text-gray-900 dark:text-slate-100 leading-none">{studentName}</span>
+                      <span className="block text-xs text-gray-500 dark:text-slate-400 mt-1 leading-none">Student</span>
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
