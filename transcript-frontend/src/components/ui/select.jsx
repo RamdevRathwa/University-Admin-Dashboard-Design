@@ -27,8 +27,10 @@ export function Select({ value, defaultValue, onValueChange, disabled, children 
     const key = String(v);
     const val = String(label ?? "");
     setLabels((prev) => {
+      if (!val) return prev;
+      if (prev.get(key) === val) return prev;
       const next = new Map(prev);
-      if (val) next.set(key, val);
+      next.set(key, val);
       return next;
     });
   }, []);
@@ -42,7 +44,12 @@ export function Select({ value, defaultValue, onValueChange, disabled, children 
   );
 
   return (
-    <SelectContext.Provider value={{ value: current, setValue, open, setOpen, disabled: !!disabled, registerLabel, getLabel }}>
+    <SelectContext.Provider
+      value={React.useMemo(
+        () => ({ value: current, setValue, open, setOpen, disabled: !!disabled, registerLabel, getLabel }),
+        [current, open, disabled, registerLabel, getLabel]
+      )}
+    >
       <div className="relative">{children}</div>
     </SelectContext.Provider>
   );
@@ -106,10 +113,13 @@ export function SelectItem({ value, className, children, textValue }) {
   const ctx = React.useContext(SelectContext);
   const selected = String(ctx?.value) === String(value);
 
+  const label = React.useMemo(() => {
+    return (textValue !== undefined ? String(textValue) : extractText(children)).trim();
+  }, [children, textValue]);
+
   React.useEffect(() => {
-    const label = (textValue !== undefined ? String(textValue) : extractText(children)).trim();
     ctx?.registerLabel?.(value, label);
-  }, [ctx, value, children, textValue]);
+  }, [ctx?.registerLabel, value, label]);
 
   return (
     <button
