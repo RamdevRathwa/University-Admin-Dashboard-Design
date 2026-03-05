@@ -62,14 +62,14 @@ export function SelectTrigger({ className, children, ...props }) {
       type="button"
       disabled={ctx?.disabled}
       className={cn(
-        "flex h-10 w-full items-center justify-between rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af] focus-visible:ring-offset-2 disabled:opacity-50",
+        "flex h-10 w-full items-center justify-between rounded-xl border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-gray-900 dark:text-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-950 disabled:opacity-50",
         className
       )}
       onClick={() => !ctx?.disabled && ctx?.setOpen(!ctx.open)}
       {...props}
     >
       {children}
-      <span className="text-gray-400" aria-hidden="true">
+      <span className="text-gray-400 dark:text-slate-500" aria-hidden="true">
         v
       </span>
     </button>
@@ -80,7 +80,11 @@ export function SelectValue({ placeholder }) {
   const ctx = React.useContext(SelectContext);
   const label = ctx?.value ? ctx?.getLabel?.(ctx.value) : "";
   const text = label || (ctx?.value ? String(ctx.value) : "");
-  return <span className={cn("truncate", ctx?.value ? "text-gray-900" : "text-gray-500")}>{text || placeholder}</span>;
+  return (
+    <span className={cn("truncate", ctx?.value ? "text-gray-900 dark:text-slate-100" : "text-gray-500 dark:text-slate-400")}>
+      {text || placeholder}
+    </span>
+  );
 }
 
 export function SelectContent({ className, children }) {
@@ -102,7 +106,10 @@ export function SelectContent({ className, children }) {
     <div
       ref={ref}
       hidden={!ctx?.open}
-      className={cn("absolute z-[95] mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden", className)}
+      className={cn(
+        "absolute z-[95] mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg overflow-hidden",
+        className
+      )}
     >
       <div className="max-h-60 overflow-auto p-1">{children}</div>
     </div>
@@ -125,15 +132,15 @@ export function SelectItem({ value, className, children, textValue }) {
     <button
       type="button"
       className={cn(
-        "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]",
-        selected ? "bg-blue-50 text-[#1e40af] font-medium" : "",
+        "w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]",
+        selected ? "bg-blue-50 text-[#1e40af] dark:bg-slate-800 dark:text-sky-300 font-medium" : "",
         className
       )}
       onClick={() => ctx?.setValue(value)}
     >
       <span className="truncate">{children}</span>
       {selected ? (
-        <span className="text-[#1e40af]" aria-hidden="true">
+        <span className="text-[#1e40af] dark:text-sky-300" aria-hidden="true">
           OK
         </span>
       ) : null}

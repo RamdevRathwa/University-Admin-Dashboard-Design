@@ -30,7 +30,7 @@ export default function ClerkLayout() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100 text-gray-900">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-slate-950 text-gray-900 dark:text-slate-100">
       <div className="hidden lg:block">
         <Sidebar collapsed={collapsed} onLogout={handleLogout} />
       </div>
@@ -48,7 +48,7 @@ export default function ClerkLayout() {
           onLogout={handleLogout}
           onOpenMobileMenu={() => setMobileOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto bg-gray-100">
+        <main className="flex-1 overflow-y-auto bg-gray-100 dark:bg-slate-950">
           <div className="p-4 sm:p-6 lg:p-8 animate-fadeIn">
             <Outlet key={location.pathname} />
           </div>

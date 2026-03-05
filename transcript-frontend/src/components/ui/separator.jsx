@@ -6,9 +6,11 @@ export const Separator = React.forwardRef(({ className, orientation = "horizonta
     ref={ref}
     role="separator"
     aria-orientation={orientation}
-    className={cn(orientation === "horizontal" ? "h-px w-full bg-gray-200" : "w-px h-full bg-gray-200", className)}
+    className={cn(
+      orientation === "horizontal" ? "h-px w-full bg-gray-200 dark:bg-slate-800" : "w-px h-full bg-gray-200 dark:bg-slate-800",
+      className
+    )}
     {...props}
   />
 ));
 Separator.displayName = "Separator";
-

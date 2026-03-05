@@ -61,7 +61,7 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100 text-gray-900">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-slate-950 text-gray-900 dark:text-slate-100">
       <div className="hidden lg:block">
         <AppSidebar
           collapsed={collapsed}
@@ -103,7 +103,7 @@ export default function AdminLayout() {
           onOpenMobileMenu={() => setMobileOpen(true)}
           onLogout={doLogout}
         />
-        <main className="flex-1 overflow-y-auto bg-gray-100">
+        <main className="flex-1 overflow-y-auto bg-gray-100 dark:bg-slate-950">
           <div className="p-4 sm:p-6 lg:p-8 animate-fadeIn">
             <Outlet key={location.pathname} />
           </div>

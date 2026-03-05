@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind v4: make `dark:` use a `.dark` class on <html> */
+@custom-variant dark (&:is(.dark *));
+
 .input {
   width: 100%;
   border-width: 1px;
