@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
+import PageHeader from "../../components/shell/PageHeader";
 
 export default function SystemSettings() {
   const { toast } = useToast();
@@ -78,6 +79,11 @@ export default function SystemSettings() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="System Settings"
+        description="Configure global application settings for identity, OTP, email, and future payment integration."
+      />
+
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -270,4 +276,3 @@ export default function SystemSettings() {
     </div>
   );
 }
-

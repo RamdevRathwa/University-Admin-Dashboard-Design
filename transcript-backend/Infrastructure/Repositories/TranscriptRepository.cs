@@ -2,6 +2,7 @@ using Domain.Entities;
 using Domain.Interfaces;
 using Infrastructure.Persistence.V2;
 using Infrastructure.Persistence.V2.Entities;
+using Application.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
@@ -101,6 +102,8 @@ public sealed class TranscriptRepository : ITranscriptRepository
             sem.Subjects = subjects;
             return sem;
         }).ToList();
+
+        semesters = await AppendMissingCurriculumSemestersAsync(id, row, studentUser, semesters, ct);
 
         var semFrom = semesters.Count == 0 ? 0 : semesters.Min(x => x.SemesterNumber);
         var semTo = semesters.Count == 0 ? 0 : semesters.Max(x => x.SemesterNumber);
@@ -368,6 +371,8 @@ public sealed class TranscriptRepository : ITranscriptRepository
             Program = program?.ProgramCode ?? string.Empty,
             Department = dept?.DeptName ?? string.Empty,
             Faculty = fac?.FacultyName ?? string.Empty,
+            AdmissionYear = await ResolveCalendarYearAsync(student.AdmissionYearId, ct),
+            GraduationYear = await ResolveCalendarYearAsync(student.GraduationYearId, ct),
             Nationality = profile?.Nationality ?? string.Empty,
             DOB = profile?.DateOfBirthRaw is null ? null : DateOnly.FromDateTime(profile.DateOfBirthRaw.Value),
             BirthPlace = profile?.BirthPlace ?? string.Empty,
@@ -415,6 +420,164 @@ public sealed class TranscriptRepository : ITranscriptRepository
             .FirstOrDefaultAsync(ct);
         if (id.HasValue) return id.Value;
         return await _db.Users.AsNoTracking().Select(x => x.UserId).FirstAsync(ct);
+    }
+
+    private async Task<int?> ResolveCalendarYearAsync(int? academicYearId, CancellationToken ct)
+    {
+        if (!academicYearId.HasValue) return null;
+
+        return await _db.AcademicYears.AsNoTracking()
+            .Where(x => x.AcademicYearId == academicYearId.Value)
+            .Select(x => (int?)x.StartDate.Year)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task<List<TranscriptSemesterSnapshot>> AppendMissingCurriculumSemestersAsync(
+        Guid legacyTranscriptId,
+        V2Transcript transcriptRow,
+        User studentUser,
+        List<TranscriptSemesterSnapshot> existingSemesters,
+        CancellationToken ct)
+    {
+        var profile = studentUser.StudentProfile;
+        var current = existingSemesters
+            .OrderBy(x => x.SemesterNumber)
+            .ToDictionary(x => x.SemesterNumber);
+
+        var curriculumRows = await (
+            from cs in _db.CurriculumSubjects.AsNoTracking()
+            join sv in _db.SubjectVersions.AsNoTracking() on cs.SubjectVersionId equals sv.SubjectVersionId
+            join subj in _db.Subjects.AsNoTracking() on sv.SubjectId equals subj.SubjectId
+            where cs.CurriculumVersionId == transcriptRow.CurriculumVersionId && cs.IsActive
+            orderby cs.SemesterNumber, cs.DisplayOrder, subj.SubjectCode
+            select new
+            {
+                cs.CurriculumSubjectId,
+                SemesterNumber = (int)cs.SemesterNumber,
+                SubjectCode = subj.SubjectCode,
+                SubjectName = string.IsNullOrWhiteSpace(sv.TitleOnTranscript) ? subj.SubjectName : sv.TitleOnTranscript,
+                cs.ThHoursPerWeek,
+                cs.PrHoursPerWeek,
+                cs.ThCredits,
+                cs.PrCredits
+            })
+            .ToListAsync(ct);
+
+        if (curriculumRows.Count == 0)
+            return existingSemesters.OrderBy(x => x.SemesterNumber).ToList();
+
+        var marks = await _db.StudentMarks.AsNoTracking()
+            .Where(x => x.StudentId == transcriptRow.StudentId)
+            .GroupBy(x => x.CurriculumSubjectId)
+            .Select(g => g
+                .OrderByDescending(x => x.IsFinal)
+                .ThenByDescending(x => x.VerifiedAt ?? x.EnteredAt)
+                .FirstOrDefault()!)
+            .ToDictionaryAsync(x => x.CurriculumSubjectId, x => x, ct);
+
+        foreach (var semesterGroup in curriculumRows.GroupBy(x => x.SemesterNumber).OrderBy(x => x.Key))
+        {
+            if (current.ContainsKey(semesterGroup.Key))
+                continue;
+
+            var sem = new TranscriptSemesterSnapshot
+            {
+                Id = Guid.NewGuid(),
+                TranscriptId = legacyTranscriptId,
+                SemesterNumber = semesterGroup.Key,
+                YearTitle = BuildYearTitle(profile?.Program ?? string.Empty, semesterGroup.Key),
+                TermTitle = BuildTermTitle(profile?.AdmissionYear, semesterGroup.Key),
+                CreditPointScheme = 10
+            };
+
+            var sn = 1;
+            foreach (var row in semesterGroup)
+            {
+                marks.TryGetValue(row.CurriculumSubjectId, out var mark);
+                var thGrade = (mark?.ThGradeLetter ?? string.Empty).Trim();
+                var prGrade = (mark?.PrGradeLetter ?? string.Empty).Trim();
+                var thGp = GradeCalc.GradePoint(thGrade);
+                var prGp = GradeCalc.GradePoint(prGrade);
+                var thEarned = GradeCalc.Round2(row.ThCredits * thGp);
+                var prEarned = GradeCalc.Round2(row.PrCredits * prGp);
+
+                sem.Subjects.Add(new TranscriptSubjectSnapshot
+                {
+                    Id = Guid.NewGuid(),
+                    TranscriptSemesterSnapshotId = sem.Id,
+                    SN = sn++,
+                    SubjectCode = row.SubjectCode,
+                    SubjectName = row.SubjectName,
+                    ThHours = row.ThHoursPerWeek,
+                    PrHours = row.PrHoursPerWeek,
+                    ThCredits = row.ThCredits,
+                    PrCredits = row.PrCredits,
+                    ThGrade = thGrade,
+                    PrGrade = prGrade,
+                    ThGradePoint = thGp,
+                    PrGradePoint = prGp,
+                    ThEarned = thEarned,
+                    PrEarned = prEarned
+                });
+            }
+
+            sem.ThHoursTotal = GradeCalc.Round2(sem.Subjects.Sum(x => x.ThHours));
+            sem.PrHoursTotal = GradeCalc.Round2(sem.Subjects.Sum(x => x.PrHours));
+            sem.ThCreditsTotal = GradeCalc.Round2(sem.Subjects.Sum(x => x.ThCredits));
+            sem.PrCreditsTotal = GradeCalc.Round2(sem.Subjects.Sum(x => x.PrCredits));
+            sem.ThGradePointsSum = GradeCalc.Round2(sem.Subjects.Sum(x => x.ThGradePoint));
+            sem.PrGradePointsSum = GradeCalc.Round2(sem.Subjects.Sum(x => x.PrGradePoint));
+            sem.ThEarnedTotal = GradeCalc.Round2(sem.Subjects.Sum(x => x.ThEarned));
+            sem.PrEarnedTotal = GradeCalc.Round2(sem.Subjects.Sum(x => x.PrEarned));
+            sem.ThOutOfTotal = GradeCalc.ToOutOf(sem.ThCreditsTotal, sem.CreditPointScheme);
+            sem.PrOutOfTotal = GradeCalc.ToOutOf(sem.PrCreditsTotal, sem.CreditPointScheme);
+
+            var creditsTotal = sem.ThCreditsTotal + sem.PrCreditsTotal;
+            var earnedTotal = sem.ThEarnedTotal + sem.PrEarnedTotal;
+            var hasAnyGrades = sem.Subjects.Any(x => !string.IsNullOrWhiteSpace(x.ThGrade) || !string.IsNullOrWhiteSpace(x.PrGrade));
+
+            sem.EGP = GradeCalc.Round2(earnedTotal);
+            sem.SGPA = creditsTotal <= 0 || !hasAnyGrades ? 0m : GradeCalc.Round2(earnedTotal / creditsTotal);
+            sem.Percentage = hasAnyGrades ? GradeCalc.Round2(sem.SGPA * 10m) : 0m;
+            sem.SemesterGrade = hasAnyGrades ? GradeCalc.GradeFromGp(sem.SGPA) : string.Empty;
+            sem.Result = !hasAnyGrades
+                ? string.Empty
+                : sem.Subjects.Any(x => string.Equals((x.ThGrade ?? string.Empty).Trim(), "F", StringComparison.OrdinalIgnoreCase) ||
+                                        string.Equals((x.PrGrade ?? string.Empty).Trim(), "F", StringComparison.OrdinalIgnoreCase))
+                    ? "FAIL"
+                    : "PASS";
+
+            current[semesterGroup.Key] = sem;
+        }
+
+        return current.Values.OrderBy(x => x.SemesterNumber).ToList();
+    }
+
+    private static string BuildYearTitle(string program, int semesterNumber)
+    {
+        var yearIndex = ((Math.Max(semesterNumber, 1) - 1) / 2) + 1;
+        var yearToken = yearIndex switch
+        {
+            1 => "BE-I",
+            2 => "BE-II",
+            3 => "BE-III",
+            4 => "BE-IV",
+            _ => $"Year-{yearIndex}"
+        };
+
+        return string.IsNullOrWhiteSpace(program) ? yearToken : $"{yearToken} ({program})";
+    }
+
+    private static string BuildTermTitle(int? admissionYear, int semesterNumber)
+    {
+        var term = (semesterNumber % 2) == 1 ? "First Semester" : "Second Semester";
+        if (!admissionYear.HasValue || admissionYear.Value <= 0)
+            return term;
+
+        var yearOffset = (semesterNumber - 1) / 2;
+        var fromYear = admissionYear.Value + yearOffset;
+        var toYear = fromYear + 1;
+        return $"{term} ({fromYear}-{toYear})";
     }
 
     private static byte[] SafeFromBase64(string s)

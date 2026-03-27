@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Separator } from "../../components/ui/separator";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Alert } from "../../components/ui/alert";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 import { studentTranscriptsService } from "../../services/studentTranscriptsService";
+import { DownloadCloud } from "lucide-react";
 
 export default function Downloads() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState(null);
   const [error, setError] = useState("");
@@ -42,15 +47,14 @@ export default function Downloads() {
     setDownloadingId(id);
     setError("");
     try {
-      const { blob, fileName } = await studentTranscriptsService.downloadPdf(id);
-      const url = URL.createObjectURL(blob);
+      const url = studentTranscriptsService.getDownloadUrl(id);
       const a = document.createElement("a");
       a.href = url;
-      a.download = fileName || "transcript.pdf";
+      a.download = `transcript-${id}.pdf`;
+      a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
     } catch (e) {
       setError(e?.message || "Download failed.");
     } finally {
@@ -60,15 +64,15 @@ export default function Downloads() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Download Transcripts</h1>
-          <p className="text-sm text-gray-500">Access your issued transcripts and download them as PDF.</p>
-        </div>
-        <p className="text-xs text-gray-500">
-          {loading ? "Loading..." : `${transcripts.length} transcript${transcripts.length !== 1 ? "s" : ""} available`}
-        </p>
-      </div>
+      <PageHeader
+        title="Download Transcripts"
+        description="Access your issued transcripts and download them as PDF."
+        actions={
+          <p className="text-xs text-gray-500 dark:text-slate-400">
+            {loading ? "Loading..." : `${transcripts.length} transcript${transcripts.length !== 1 ? "s" : ""} available`}
+          </p>
+        }
+      />
 
       {error ? <Alert variant="destructive">{error}</Alert> : null}
 
@@ -97,14 +101,14 @@ export default function Downloads() {
         </div>
       ) : transcripts.length === 0 ? (
         <Card>
-          <CardHeader className="text-center">
-            <CardTitle>No Transcripts Available</CardTitle>
-            <CardDescription>You have not been issued any transcripts yet.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center">
-            <Button asChild>
-              <a href="/dashboard/request">Request Transcript</a>
-            </Button>
+          <CardContent className="p-6">
+            <EmptyState
+              icon={DownloadCloud}
+              title="No transcripts available yet"
+              description="A download link will appear here after your transcript has completed the full Clerk → HoD → Dean workflow."
+              actionLabel="Request Transcript"
+              onAction={() => navigate("/dashboard/request")}
+            />
           </CardContent>
         </Card>
       ) : (

@@ -126,7 +126,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         {
             c.Border(1).Padding(8).Row(r =>
             {
-                r.ConstantColumn(85).AlignMiddle().Element(LogoLeft);
+                r.ConstantColumn(110).AlignMiddle().Element(LogoLeft);
                 r.RelativeColumn().AlignMiddle().Column(col =>
                 {
                     col.Item().AlignCenter().Text("Faculty of Technology & Engineering").SemiBold().FontSize(14);
@@ -137,24 +137,53 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                     col.Item().AlignCenter().Text("E-mail: dean-tech@msubaroda.ac.in  &  deantech@yahoo.in").FontSize(9);
                     col.Item().AlignCenter().Text("ACCREDITED GRADE “A+” BY NAAC").SemiBold().FontSize(10);
                 });
-                r.ConstantColumn(85).AlignMiddle().Element(LogoRight);
+                r.ConstantColumn(110).AlignMiddle().Element(LogoRight);
             });
         }
 
         private void LogoLeft(IContainer c)
         {
             // File is optional. If missing, keep the space.
-            var p = Path.Combine(AppContext.BaseDirectory, "Assets", "university-logo.png");
+            var p = ResolveUniversityLogoPath();
             if (File.Exists(p))
-                c.Height(60).AlignCenter().AlignMiddle().Image(p, ImageScaling.FitArea);
+            {
+                var bytes = File.ReadAllBytes(p);
+                c.AlignCenter().AlignMiddle().Width(82).Height(82).Padding(2)
+                    .Image(bytes)
+                    .FitArea();
+            }
             else
-                c.Height(60);
+                c.Width(82).Height(82);
         }
 
         private void LogoRight(IContainer c)
         {
             // Placeholder for the 75-years emblem. Keep empty for now.
-            c.Height(60);
+            c.Width(82).Height(82);
+        }
+
+        private static string ResolveUniversityLogoPath()
+        {
+            var candidates = new List<string>
+            {
+                Path.Combine(AppContext.BaseDirectory, "Assets", "university-logo.jpg"),
+                Path.Combine(AppContext.BaseDirectory, "Assets", "university-logo.png")
+            };
+
+            var cursor = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            for (var i = 0; i < 8 && !string.IsNullOrWhiteSpace(cursor); i++)
+            {
+                candidates.Add(Path.Combine(cursor, "Assets", "university-logo.jpg"));
+                candidates.Add(Path.Combine(cursor, "Assets", "university-logo.png"));
+                candidates.Add(Path.Combine(cursor, "API", "Assets", "university-logo.jpg"));
+                candidates.Add(Path.Combine(cursor, "API", "Assets", "university-logo.png"));
+
+                var parent = Directory.GetParent(cursor);
+                if (parent is null) break;
+                cursor = parent.FullName;
+            }
+
+            return candidates.FirstOrDefault(File.Exists) ?? candidates[0];
         }
 
         private void ComposeFooter(IContainer c)

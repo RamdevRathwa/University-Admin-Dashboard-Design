@@ -59,18 +59,23 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var gradeEntries = await _grades.GetByStudentIdAsync(student.Id, ct);
         var gradeMap = gradeEntries.ToDictionary(x => x.CurriculumSubjectId, x => x);
 
-        var semesters = subjects
+        var subjectsBySemester = subjects
             .GroupBy(x => x.SemesterNumber)
-            .OrderBy(g => g.Key)
-            .Select(g =>
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.SubjectCode).ToList());
+
+        var actualMaxSemester = subjectsBySemester.Keys.DefaultIfEmpty(0).Max();
+        var expectedSemesterCount = ResolveExpectedSemesterCount(profile.Program, profile.AdmissionYear, profile.GraduationYear, actualMaxSemester);
+
+        var semesters = Enumerable.Range(1, expectedSemesterCount)
+            .Select(semNo =>
             {
-                var semNo = g.Key;
-                var scheme = g.Select(x => x.CreditPointScheme).FirstOrDefault();
+                var semesterSubjects = subjectsBySemester.GetValueOrDefault(semNo) ?? new List<CurriculumSubject>();
+                var scheme = semesterSubjects.Select(x => x.CreditPointScheme).FirstOrDefault();
 
                 var yearTitle = BuildYearTitle(profile.Program, profile.AdmissionYear, semNo);
                 var termTitle = BuildTermTitle(profile.AdmissionYear, semNo);
 
-                var list = g.Select(s =>
+                var list = semesterSubjects.Select(s =>
                 {
                     gradeMap.TryGetValue(s.Id, out var ge);
                     return new GradeEntrySubjectDto(
@@ -237,6 +242,29 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var months = (semesterNumber % 2) == 1 ? "(JUL - NOV)" : "(DEC - MAY)";
         var ay = admissionYear.HasValue ? $"{admissionYear + ((semesterNumber - 1) / 2)}" : string.Empty;
         return string.IsNullOrWhiteSpace(ay) ? $"{term} {months}" : $"{term} {months} {ay}";
+    }
+
+    private static int ResolveExpectedSemesterCount(string? program, int? admissionYear, int? graduationYear, int actualMaxSemester)
+    {
+        var maxSemester = Math.Max(actualMaxSemester, 0);
+
+        if (admissionYear.HasValue && graduationYear.HasValue && graduationYear.Value >= admissionYear.Value)
+        {
+            var durationYears = graduationYear.Value - admissionYear.Value;
+            if (durationYears > 0)
+                maxSemester = Math.Max(maxSemester, durationYears * 2);
+        }
+
+        var normalizedProgram = (program ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalizedProgram.StartsWith("BE-", StringComparison.Ordinal) ||
+            normalizedProgram.StartsWith("B.E", StringComparison.Ordinal) ||
+            normalizedProgram.StartsWith("BTECH", StringComparison.Ordinal) ||
+            normalizedProgram.StartsWith("B.TECH", StringComparison.Ordinal))
+        {
+            maxSemester = Math.Max(maxSemester, 8);
+        }
+
+        return maxSemester == 0 ? 8 : maxSemester;
     }
 
     private void EnsureClerk()

@@ -35,11 +35,17 @@ import ClerkSettings from "../pages/clerk/ClerkSettings";
 import HodDashboardHome from "../pages/hod/HodDashboardHome";
 import HodPendingApprovals from "../pages/hod/HodPendingApprovals";
 import HodReviewPage from "../pages/hod/HodReviewPage";
+import HodApprovedRequests from "../pages/hod/HodApprovedRequests";
+import HodRejectedRequests from "../pages/hod/HodRejectedRequests";
+import HodSettings from "../pages/hod/HodSettings";
 
 // Dean Pages
 import DeanDashboardHome from "../pages/dean/DeanDashboardHome";
 import DeanPendingApprovals from "../pages/dean/DeanPendingApprovals";
 import DeanReviewPage from "../pages/dean/DeanReviewPage";
+import DeanApprovedTranscripts from "../pages/dean/DeanApprovedTranscripts";
+import DeanRejectedTranscripts from "../pages/dean/DeanRejectedTranscripts";
+import DeanSettings from "../pages/dean/DeanSettings";
 
 // Admin Pages
 import AdminDashboardHome from "../pages/admin/AdminDashboardHome";
@@ -52,6 +58,8 @@ import TranscriptRecords from "../pages/admin/TranscriptRecords";
 import PaymentsPage from "../pages/admin/PaymentsPage";
 import AuditLogsPage from "../pages/admin/AuditLogsPage";
 import SystemSettings from "../pages/admin/SystemSettings";
+import EmptyState from "../components/shell/EmptyState";
+import { CircleOff } from "lucide-react";
 
 function PublicRoute({ children }) {
   const { isAuthenticated, userRole } = useAuth();
@@ -147,9 +155,9 @@ export default function AppRoutes() {
           <Route index element={<HodDashboardHome />} />
           <Route path="pending" element={<HodPendingApprovals />} />
           <Route path="review/:id" element={<HodReviewPage />} />
-          <Route path="approved" element={<div className="p-6"><h1 className="text-2xl font-bold">Approved Requests</h1></div>} />
-          <Route path="rejected" element={<div className="p-6"><h1 className="text-2xl font-bold">Rejected Requests</h1></div>} />
-          <Route path="settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Settings</h1></div>} />
+          <Route path="approved" element={<HodApprovedRequests />} />
+          <Route path="rejected" element={<HodRejectedRequests />} />
+          <Route path="settings" element={<HodSettings />} />
         </Route>
 
         {/* ---------- Protected Dean Dashboard ---------- */}
@@ -164,9 +172,9 @@ export default function AppRoutes() {
           <Route index element={<DeanDashboardHome />} />
           <Route path="pending" element={<DeanPendingApprovals />} />
           <Route path="review/:id" element={<DeanReviewPage />} />
-          <Route path="approved" element={<div className="p-6"><h1 className="text-2xl font-bold">Approved Transcripts</h1></div>} />
-          <Route path="rejected" element={<div className="p-6"><h1 className="text-2xl font-bold">Rejected Transcripts</h1></div>} />
-          <Route path="settings" element={<div className="p-6"><h1 className="text-2xl font-bold">Settings</h1></div>} />
+          <Route path="approved" element={<DeanApprovedTranscripts />} />
+          <Route path="rejected" element={<DeanRejectedTranscripts />} />
+          <Route path="settings" element={<DeanSettings />} />
         </Route>
 
         {/* ---------- Protected Admin Dashboard ---------- */}
@@ -195,8 +203,15 @@ export default function AppRoutes() {
         <Route
           path="*"
           element={
-            <div className="flex items-center justify-center h-screen text-2xl font-semibold">
-              404 - Page Not Found
+            <div className="flex min-h-screen items-center justify-center bg-gray-100 dark:bg-slate-950 p-6">
+              <div className="w-full max-w-2xl">
+                <EmptyState
+                  icon={CircleOff}
+                  title="Page not found"
+                  description="The route you opened does not exist in the current frontend. Use the sidebar or go back to a dashboard page."
+                  badge="404"
+                />
+              </div>
             </div>
           }
         />

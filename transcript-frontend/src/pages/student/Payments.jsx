@@ -1,28 +1,30 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
-import { Alert } from "../../components/ui/alert";
+import { Wallet } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 
 export default function Payments() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-        <p className="text-sm text-gray-500">Payment history will appear here once the payment module is enabled.</p>
-      </div>
-
-      <Alert className="border-blue-200 bg-blue-50 text-[#1e40af]">
-        No payment data available right now.
-      </Alert>
+      <PageHeader
+        title="Payments"
+        description="Track transcript payment activity here once the payment gateway module is connected."
+      />
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Transaction History</CardTitle>
           <CardDescription>There are no recorded transactions.</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-gray-600">
-          This page is intentionally blank until payment APIs are connected.
+        <CardContent>
+          <EmptyState
+            icon={Wallet}
+            title="Payment module not enabled yet"
+            description="This page now shows a proper empty state instead of a blank message. Once payment APIs are connected, history and receipts will appear here."
+            badge="Payments Pending"
+          />
         </CardContent>
       </Card>
     </div>
   );
 }
-

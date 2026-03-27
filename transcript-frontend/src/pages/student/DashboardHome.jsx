@@ -7,6 +7,9 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from ".
 import { Skeleton } from "../../components/ui/skeleton";
 import { apiRequest } from "../../services/apiClient";
 import StatusBadge from "../../components/approvals/StatusBadge";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
+import { FileSearch } from "lucide-react";
 
 function statusVariant(status) {
   const s = String(status || "").toLowerCase();
@@ -56,6 +59,16 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Student Dashboard"
+        description="Track your requests, approvals, and issued transcripts from one place."
+        actions={
+          <Button asChild>
+            <Link to="/dashboard/request">New Transcript Request</Link>
+          </Button>
+        }
+      />
+
       <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
         {stats.map((stat) => (
           <Card key={stat.title} className="hover:shadow-md transition-shadow">
@@ -69,12 +82,6 @@ export default function DashboardHome() {
           </Card>
         ))}
       </section>
-
-      <div className="flex justify-end">
-        <Button asChild>
-          <Link to="/dashboard/request">New Transcript Request</Link>
-        </Button>
-      </div>
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card>
@@ -101,7 +108,13 @@ export default function DashboardHome() {
                   </>
                 ) : recent.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={3} className="py-10 text-center text-sm text-gray-600">No requests yet.</TableCell>
+                    <TableCell colSpan={3} className="py-8">
+                      <EmptyState
+                        icon={FileSearch}
+                        title="No requests yet"
+                        description="Submit your first transcript request to start the approval workflow."
+                      />
+                    </TableCell>
                   </TableRow>
                 ) : (
                   recent.map((r) => (
@@ -149,4 +162,3 @@ export default function DashboardHome() {
     </div>
   );
 }
-

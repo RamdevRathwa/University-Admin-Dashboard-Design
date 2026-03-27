@@ -12,6 +12,8 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { adminService } from "../../services/adminService";
 import { ScrollText, Download } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 
 function ActionBadge({ action }) {
   const a = String(action || "").toUpperCase();
@@ -69,6 +71,11 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Audit Logs"
+        description="Review append-only system activity with filters for action, date, and record details."
+      />
+
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -155,8 +162,12 @@ export default function AuditLogsPage() {
                   ))
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-gray-500 py-10">
-                      No logs found.
+                    <TableCell colSpan={6} className="py-8">
+                      <EmptyState
+                        icon={ScrollText}
+                        title="No audit logs found"
+                        description="There are no audit entries matching the selected filters."
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -221,4 +232,3 @@ export default function AuditLogsPage() {
     </div>
   );
 }
-

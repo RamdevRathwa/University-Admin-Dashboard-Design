@@ -89,6 +89,22 @@ builder.Services
             ValidAudience = jwt.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey ?? string.Empty))
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var path = context.HttpContext.Request.Path.Value ?? string.Empty;
+                if (path.StartsWith("/api/student/transcripts/", StringComparison.OrdinalIgnoreCase) &&
+                    path.EndsWith("/download", StringComparison.OrdinalIgnoreCase))
+                {
+                    var tokenFromQuery = context.Request.Query["access_token"].FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(tokenFromQuery))
+                        context.Token = tokenFromQuery;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();

@@ -1,5 +1,7 @@
 import GradeCell from "./GradeCell";
 import { getEarnedGradePoints, getGradePoint, getOutOfPoints, round2 } from "./gradeUtils";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../../ui/select";
+import { getElectiveOptions, isElectivePlaceholder } from "./electiveOptions";
 
 function safeNum(v) {
   const n = Number(v);
@@ -8,11 +10,14 @@ function safeNum(v) {
 
 export default function SemesterTranscriptTable({
   semIndex,
+  program,
   yearTitle,
   termTitle,
   creditPointScheme = 10,
   subjects,
   grades,
+  electiveSelections,
+  setElectiveSelection,
   setGrade,
   active,
   setActive,
@@ -210,9 +215,45 @@ export default function SemesterTranscriptTable({
                 >
                   <td className={`${cellBase} text-center tabular-nums`}>{rowIndex + 1}</td>
                   <td className={`${cellBase} text-left`}>
-                    <div className="leading-tight">
-                      <div className="text-gray-900">{r.name || r.subjectName || r.SubjectName}</div>
-                    </div>
+                    {(() => {
+                      const subjectName = r.name || r.subjectName || r.SubjectName;
+                      const options = getElectiveOptions(program, r);
+                      const isElective = r.isElective || r.IsElective || isElectivePlaceholder(r);
+                      const selectedElective = electiveSelections?.[id] || "";
+
+                      if (isElective && options.length > 0 && !readOnly) {
+                        return (
+                          <div className="space-y-1">
+                            <Select value={selectedElective} onValueChange={(v) => setElectiveSelection?.(id, v)}>
+                              <SelectTrigger className="h-8 rounded-none border-black bg-white px-2 text-left text-[12px] font-medium text-gray-900 shadow-none">
+                                <SelectValue placeholder="Select elective subject" />
+                              </SelectTrigger>
+                              <SelectContent className="w-[360px]">
+                                {options.map((option) => (
+                                  <SelectItem key={option.value} value={option.value} textValue={option.label}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="text-[10px] uppercase tracking-wide text-amber-700">Elective subject</div>
+                          </div>
+                        );
+                      }
+
+                      const selectedLabel = options.find((option) => option.value === selectedElective)?.label;
+
+                      return (
+                        <div className="leading-tight">
+                          <div className="text-gray-900">{selectedLabel || subjectName}</div>
+                          {isElective ? (
+                            <div className="mt-1 text-[10px] uppercase tracking-wide text-amber-700">
+                              Elective subject
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   <td className={`${cellBase} text-center tabular-nums`}>{safeNum(r.thHours) || 0}</td>

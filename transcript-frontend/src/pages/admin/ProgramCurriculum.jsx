@@ -12,6 +12,8 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
 import { BookOpen, Plus } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 
 export default function ProgramCurriculum() {
   const { toast } = useToast();
@@ -97,6 +99,11 @@ export default function ProgramCurriculum() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Program & Curriculum"
+        description="Manage programs and versioned curricula while keeping previously-used structures read-only."
+      />
+
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -199,8 +206,12 @@ export default function ProgramCurriculum() {
                       ))
                     ) : versions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-sm text-gray-500 py-10">
-                          No curriculum versions found.
+                        <TableCell colSpan={5} className="py-8">
+                          <EmptyState
+                            icon={BookOpen}
+                            title="No curriculum versions found"
+                            description="Create the first version for the selected program to start managing semester subject mappings."
+                          />
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -274,8 +285,12 @@ export default function ProgramCurriculum() {
                       ))
                     ) : programs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-sm text-gray-500 py-10">
-                          No programs found.
+                        <TableCell colSpan={4} className="py-8">
+                          <EmptyState
+                            icon={BookOpen}
+                            title="No programs found"
+                            description="Create a program before adding curriculum versions and subject mappings."
+                          />
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -298,4 +313,3 @@ export default function ProgramCurriculum() {
     </div>
   );
 }
-

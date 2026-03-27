@@ -11,6 +11,8 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
 import { Plus, GraduationCap, Save } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 
 export default function GradingScheme() {
   const { toast } = useToast();
@@ -56,6 +58,11 @@ export default function GradingScheme() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Grading Scheme"
+        description="Define and review grading schemes without changing those already in use by transcripts."
+      />
+
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -98,8 +105,12 @@ export default function GradingScheme() {
                   ))
                 ) : schemes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-sm text-gray-500 py-10">
-                      No grading schemes found.
+                    <TableCell colSpan={4} className="py-8">
+                      <EmptyState
+                        icon={GraduationCap}
+                        title="No grading schemes found"
+                        description="Create a grading scheme to support program and curriculum setup."
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -164,4 +175,3 @@ export default function GradingScheme() {
     </div>
   );
 }
-

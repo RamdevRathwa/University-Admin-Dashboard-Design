@@ -10,6 +10,8 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { adminService } from "../../services/adminService";
 import { CreditCard, Download } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 
 function StatusBadge({ status }) {
   const s = String(status || "").toUpperCase();
@@ -48,6 +50,11 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Payments"
+        description="Review payment records, statuses, and receipt availability from one place."
+      />
+
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -123,8 +130,13 @@ export default function PaymentsPage() {
                   ))
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-gray-500 py-10">
-                      No payments found.
+                    <TableCell colSpan={6} className="py-8">
+                      <EmptyState
+                        icon={CreditCard}
+                        title="No payment records found"
+                        description="The page is ready, but the payment module has not produced any transactions for the selected filters yet."
+                        badge="No Data Yet"
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -152,4 +164,3 @@ export default function PaymentsPage() {
     </div>
   );
 }
-

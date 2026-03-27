@@ -1,132 +1,130 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { Bell, Moon, Save, Sun, UserCog } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import { useTheme } from "../../context/ThemeContext";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Switch } from "../../components/ui/switch";
+import { Badge } from "../../components/ui/badge";
+import { useToast } from "../../components/ui/use-toast";
 
-function Toggle({ enabled, onChange, label, description }) {
+function PreferenceRow({ icon: Icon, title, description, checked, onCheckedChange }) {
   return (
-    <div className="flex items-start justify-between gap-4 p-4 rounded-xl border border-gray-200 hover:bg-gray-50 transition">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-gray-900">{label}</p>
-        {description && <p className="text-sm text-gray-500 mt-0.5">{description}</p>}
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-gray-200 dark:border-slate-800 p-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-[#1e40af] dark:bg-slate-800 dark:text-sky-300">
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{title}</p>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-slate-400">{description}</p>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={() => onChange(!enabled)}
-        className={`relative w-12 h-7 rounded-full transition ${
-          enabled ? "bg-blue-800" : "bg-gray-200"
-        }`}
-        role="switch"
-        aria-checked={enabled}
-        aria-label={label}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-            enabled ? "translate-x-5" : ""
-          }`}
-        />
-      </button>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }
 
 export default function ClerkSettings() {
-  const [profile, setProfile] = useState({ name: "Clerk", email: "clerk@msubaroda.ac.in" });
-
+  const { toast } = useToast();
+  const { isDark, toggleTheme } = useTheme();
+  const [profile, setProfile] = useState({ name: "Clerk User", email: "clerk@msubaroda.ac.in" });
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifPush, setNotifPush] = useState(true);
   const [notifApprovals, setNotifApprovals] = useState(true);
 
-  const [darkMode, setDarkMode] = useState(false);
-
-  const themeLabel = useMemo(() => (darkMode ? "Dark" : "Light"), [darkMode]);
-
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-sm text-gray-500">Update profile and notification preferences.</p>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Manage your profile, alerts, and display preferences without leaving the clerk workspace."
+        actions={<Badge variant="neutral">Clerk Preferences</Badge>}
+      />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <section className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Update Profile</h3>
-            <span className="text-xs text-gray-500">Clerk</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field
-              label="Full Name"
-              value={profile.name}
-              onChange={(v) => setProfile((p) => ({ ...p, name: v }))}
-            />
-            <Field
-              label="Email"
-              value={profile.email}
-              onChange={(v) => setProfile((p) => ({ ...p, email: v }))}
-            />
-          </div>
-          <div className="mt-5 flex justify-end">
-            <button
-              type="button"
-              className="px-4 py-2.5 rounded-xl bg-blue-800 text-white text-sm font-semibold hover:bg-blue-900 transition"
-            >
-              Save Changes
-            </button>
-          </div>
-        </section>
-
-        <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-4">Theme Mode</h3>
-          <div className="p-4 rounded-xl border border-gray-200 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Theme</p>
-              <p className="text-sm text-gray-500 mt-0.5">{themeLabel} mode</p>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Profile</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Full Name</Label>
+                <Input value={profile.name} onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email</Label>
+                <Input value={profile.email} onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))} />
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDarkMode((v) => !v)}
-              className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold hover:bg-gray-50 transition"
-            >
-              Toggle
-            </button>
-          </div>
-        </section>
+            <div className="flex justify-end">
+              <Button
+                onClick={() => toast({ title: "Profile saved", description: "UI preferences updated locally." })}
+              >
+                <Save className="h-4 w-4" />
+                Save Changes
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Appearance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border border-gray-200 dark:border-slate-800 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">Theme Mode</p>
+                  <p className="mt-0.5 text-sm text-gray-500 dark:text-slate-400">
+                    Currently using {isDark ? "dark" : "light"} mode.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={toggleTheme}>
+                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  Toggle
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-dashed border-gray-200 dark:border-slate-800 p-4 text-sm text-gray-500 dark:text-slate-400">
+              Theme preference is shared across staff dashboards, so Clerk, HoD, Dean, and Admin stay visually consistent.
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-base font-semibold text-gray-900 mb-4">Notification Preferences</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Toggle
-            enabled={notifEmail}
-            onChange={setNotifEmail}
-            label="Email Notifications"
-            description="Updates on verification and requests"
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base">Notification Preferences</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <PreferenceRow
+            icon={Bell}
+            title="Email Notifications"
+            description="Receive request and verification updates by email."
+            checked={notifEmail}
+            onCheckedChange={setNotifEmail}
           />
-          <Toggle
-            enabled={notifPush}
-            onChange={setNotifPush}
-            label="Push Notifications"
-            description="In-app alerts"
+          <PreferenceRow
+            icon={UserCog}
+            title="In-app Alerts"
+            description="Keep action reminders visible inside the clerk panel."
+            checked={notifPush}
+            onCheckedChange={setNotifPush}
           />
-          <Toggle
-            enabled={notifApprovals}
-            onChange={setNotifApprovals}
-            label="Approval Updates"
-            description="HoD/Dean actions"
+          <PreferenceRow
+            icon={Bell}
+            title="Approval Updates"
+            description="See when HoD or Dean sends a request back for changes."
+            checked={notifApprovals}
+            onCheckedChange={setNotifApprovals}
           />
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function Field({ label, value, onChange }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-800 transition"
-      />
-    </label>
-  );
-}

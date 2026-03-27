@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../components/ui/table";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { apiRequest } from "../../services/apiClient";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
+import { ClipboardList } from "lucide-react";
 
 function statusBadge(status) {
   const s = String(status || "");
@@ -88,10 +91,7 @@ export default function Status() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Request Status</h1>
-        <p className="text-sm text-gray-500">Track the progress of your transcript requests.</p>
-      </div>
+      <PageHeader title="Request Status" description="Track the progress of your transcript requests." />
 
       <Card>
         <CardHeader>
@@ -112,20 +112,28 @@ export default function Status() {
               {loading ? (
                 <TableRow><TableCell colSpan={4} className="py-10 text-center text-sm text-gray-600">Loading...</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="py-10 text-center text-sm text-gray-600">No requests yet.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8">
+                    <EmptyState
+                      icon={ClipboardList}
+                      title="No requests submitted yet"
+                      description="Once you submit a transcript request, its workflow progress will appear here."
+                    />
+                  </TableCell>
+                </TableRow>
               ) : (
                 rows.map((request) => {
                   const isExpanded = expandedId === request.id;
                   const timeline = buildTimeline(request);
                   return (
-                    <>
+                    <Fragment key={request.id}>
                       <TableRow key={request.id} className="cursor-pointer" onClick={() => toggleExpand(request.id)}>
                         <TableCell className="font-medium text-gray-900">{String(request.id).slice(0, 8).toUpperCase()}</TableCell>
                         <TableCell className="text-gray-600 tabular-nums">{request.createdAt ? new Date(request.createdAt).toLocaleString("en-IN") : "-"}</TableCell>
                         <TableCell>{statusBadge(request.status)}</TableCell>
                         <TableCell>
                           <Button variant="ghost" className="h-auto px-0 text-[#1e40af] hover:bg-transparent hover:underline">
-                            View {isExpanded ? "^" : "v"}
+                            View {isExpanded ? "▲" : "▼"}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -153,7 +161,7 @@ export default function Status() {
                                         ].join(" ")}
                                         aria-hidden="true"
                                       >
-                                        {step.status === "completed" ? "OK" : index + 1}
+                                        {step.status === "completed" ? "✓" : index + 1}
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-gray-900">{step.step}</p>
@@ -167,7 +175,7 @@ export default function Status() {
                           </TableCell>
                         </TableRow>
                       ) : null}
-                    </>
+                    </Fragment>
                   );
                 })
               )}
@@ -178,4 +186,3 @@ export default function Status() {
     </div>
   );
 }
-

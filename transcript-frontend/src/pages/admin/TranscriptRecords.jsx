@@ -12,6 +12,8 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
 import { FileText, Download, CheckCircle2, Send } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
+import EmptyState from "../../components/shell/EmptyState";
 
 function StatusBadge({ status }) {
   const s = String(status || "").toUpperCase();
@@ -71,6 +73,11 @@ export default function TranscriptRecords() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Transcript Records"
+        description="Admin can publish after Dean approval, but cannot change academic content or locked transcripts."
+      />
+
       <Card className="rounded-xl">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -148,8 +155,13 @@ export default function TranscriptRecords() {
                   ))
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-gray-500 py-10">
-                      No transcripts found.
+                    <TableCell colSpan={6} className="py-8">
+                      <EmptyState
+                        icon={FileText}
+                        title="No transcript records found"
+                        description="There are no transcript records matching the current filters. Once Dean-approved records reach Admin, they will appear here for publishing."
+                        badge="Awaiting Records"
+                      />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -228,4 +240,3 @@ export default function TranscriptRecords() {
     </div>
   );
 }
-

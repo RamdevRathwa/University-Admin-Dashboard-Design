@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Save, Send, RotateCcw } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -8,6 +8,7 @@ import SearchBar from "../../components/clerk/SearchBar";
 import SemesterTranscriptTable from "../../components/clerk/grade-entry/SemesterTranscriptTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
 import { getEarnedGradePoints, getGradePoint, getOutOfPoints } from "../../components/clerk/grade-entry/gradeUtils";
+import { getElectiveOptions, isElectivePlaceholder } from "../../components/clerk/grade-entry/electiveOptions";
 import { clerkGradeEntryService } from "../../services/clerkGradeEntryService";
 
 function formatDob(dobValue) {
@@ -35,6 +36,7 @@ export default function ClerkGradeEntryPage() {
   const [loading, setLoading] = useState(false);
   const [student, setStudent] = useState(null);
   const [semesters, setSemesters] = useState([]);
+  const [electiveSelections, setElectiveSelections] = useState({});
 
   // Grades keyed by `${semIndex}:${rowIndex}:${part}` where part is 'th' | 'pr'
   const [grades, setGrades] = useState({});
@@ -99,8 +101,29 @@ export default function ClerkGradeEntryPage() {
           prCredits: sub.prCredits || sub.PrCredits || 0,
           thGrade: sub.thGrade || sub.ThGrade || "",
           prGrade: sub.prGrade || sub.PrGrade || "",
+          isElective: sub.isElective ?? sub.IsElective ?? false,
         })),
       }));
+
+      let savedElectives = {};
+      try {
+        savedElectives = JSON.parse(window.localStorage.getItem(`clerk-elective-selections:${mappedStudent.prn}`) || "{}");
+      } catch {
+        savedElectives = {};
+      }
+
+      const nextElectives = {};
+      mappedSemesters.forEach((sem) => {
+        (sem.subjects || []).forEach((sub) => {
+          const subjectId = sub.curriculumSubjectId;
+          if (!subjectId) return;
+          const options = getElectiveOptions(mappedStudent.program, sub);
+          const saved = savedElectives?.[subjectId];
+          if (saved && options.some((option) => option.value === saved)) {
+            nextElectives[subjectId] = saved;
+          }
+        });
+      });
 
       const nextGrades = {};
       mappedSemesters.forEach((sem) => {
@@ -113,6 +136,7 @@ export default function ClerkGradeEntryPage() {
 
       setStudent(mappedStudent);
       setSemesters(mappedSemesters);
+      setElectiveSelections(nextElectives);
       setGrades(nextGrades);
       setActiveCell({ semIndex: 0, rowIndex: 0 });
       setRemarks("");
@@ -126,6 +150,7 @@ export default function ClerkGradeEntryPage() {
       setInfo("");
       setStudent(null);
       setSemesters([]);
+      setElectiveSelections({});
       setGrades({});
     } finally {
       setLoading(false);
@@ -137,6 +162,20 @@ export default function ClerkGradeEntryPage() {
     setGrades((prev) => ({ ...prev, [k]: grade }));
     if (errors) setErrors("");
   };
+
+  const onSetElectiveSelection = (subjectId, value) => {
+    setElectiveSelections((prev) => ({ ...prev, [subjectId]: value }));
+    if (errors) setErrors("");
+  };
+
+  useEffect(() => {
+    if (!student?.prn) return;
+    try {
+      window.localStorage.setItem(`clerk-elective-selections:${student.prn}`, JSON.stringify(electiveSelections || {}));
+    } catch {
+      // ignore storage issues
+    }
+  }, [student?.prn, electiveSelections]);
 
   const incompleteCount = useMemo(() => {
     const sems = Array.isArray(semesters) ? semesters : [];
@@ -154,6 +193,24 @@ export default function ClerkGradeEntryPage() {
   }, [semesters, grades]);
 
   const canSubmit = student && semesters.length > 0 && incompleteCount === 0 && !submitting;
+
+  const pendingElectiveCount = useMemo(() => {
+    if (!student?.program) return 0;
+    let missing = 0;
+    (semesters || []).forEach((sem) => {
+      (sem.subjects || []).forEach((sub) => {
+        const subjectId = sub.curriculumSubjectId;
+        if (!subjectId) return;
+        const options = getElectiveOptions(student.program, sub);
+        const elective = sub.isElective || isElectivePlaceholder(sub);
+        if (!elective || options.length === 0) return;
+        if (!electiveSelections?.[subjectId]) missing += 1;
+      });
+    });
+    return missing;
+  }, [electiveSelections, semesters, student?.program]);
+
+  const canSubmitWithElectives = canSubmit && pendingElectiveCount === 0;
 
   const buildItemsPayload = () => {
     const items = [];
@@ -206,6 +263,10 @@ export default function ClerkGradeEntryPage() {
     }
     if (incompleteCount > 0) {
       setErrors("Please select grades for all subjects before submitting.");
+      return;
+    }
+    if (pendingElectiveCount > 0) {
+      setErrors("Please select the elective subject for all elective rows before submitting.");
       return;
     }
     setInfo("");
@@ -277,7 +338,7 @@ export default function ClerkGradeEntryPage() {
                   <Save className="h-4 w-4 mr-2" />
                   Save Draft
                 </Button>
-                <Button type="button" onClick={submitToHod} disabled={!canSubmit}>
+                <Button type="button" onClick={submitToHod} disabled={!canSubmitWithElectives}>
                   <Send className="h-4 w-4 mr-2" />
                   Submit to HoD
                 </Button>
@@ -326,6 +387,11 @@ export default function ClerkGradeEntryPage() {
             ) : (
               <div className="text-sm font-semibold text-gray-900">All grades entered</div>
             )}
+            {pendingElectiveCount > 0 ? (
+              <div className="text-sm text-amber-700">
+                <span className="font-semibold text-amber-800 tabular-nums">{pendingElectiveCount}</span> elective selections pending
+              </div>
+            ) : null}
 
             <div className="space-y-8">
               {semesters.map((sem, semIndex) => {
@@ -335,11 +401,14 @@ export default function ClerkGradeEntryPage() {
                   <SemesterTranscriptTable
                     key={`${semIndex}-${sem.termTitle}`}
                     semIndex={semIndex}
+                    program={student.program}
                     yearTitle={sem.yearTitle}
                     termTitle={sem.termTitle}
                     creditPointScheme={sem.creditPointScheme}
                     subjects={sem.subjects}
                     grades={grades}
+                    electiveSelections={electiveSelections}
+                    setElectiveSelection={onSetElectiveSelection}
                     setGrade={onSetGrade}
                     active={activeCell}
                     setActive={setActiveCell}
