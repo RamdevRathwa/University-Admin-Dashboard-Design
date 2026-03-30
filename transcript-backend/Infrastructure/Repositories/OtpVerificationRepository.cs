@@ -45,6 +45,7 @@ public sealed class OtpVerificationRepository : IOtpVerificationRepository
             Identifier = row.Identifier,
             Purpose = purpose,
             OtpCode = $"{saltHex}:{hashHex}",
+            Attempts = row.Attempts,
             ExpiresAt = row.ExpiresAt,
             IsUsed = row.UsedAt != null,
             CreatedAt = row.CreatedAt
@@ -116,6 +117,46 @@ public sealed class OtpVerificationRepository : IOtpVerificationRepository
 
         // Fallback: mark latest active row.
         row.UsedAt = now;
+    }
+
+    public async Task<bool> IncrementAttemptAsync(OtpVerification otp, int maxAttempts, CancellationToken ct = default)
+    {
+        var parts = (otp.OtpCode ?? string.Empty).Split(':', 2);
+        if (parts.Length != 2) return false;
+
+        var salt = Convert.FromHexString(parts[0]);
+        var hash = Convert.FromHexString(parts[1]);
+
+        var now = DateTimeOffset.UtcNow;
+        var p = PurposeToCode(otp.Purpose);
+
+        var row = await _db.OtpVerifications
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(x =>
+                x.Identifier == otp.Identifier &&
+                x.Purpose == p &&
+                x.UsedAt == null &&
+                x.ExpiresAt > now, ct);
+
+        if (row is null) return false;
+
+        if (row.OtpSalt.SequenceEqual(salt) && row.OtpHash.SequenceEqual(hash))
+        {
+            row.Attempts += 1;
+        }
+        else
+        {
+            // Fallback: still increment latest active row to keep brute-force resistance.
+            row.Attempts += 1;
+        }
+
+        if (maxAttempts > 0 && row.Attempts >= maxAttempts)
+        {
+            row.UsedAt = now;
+            return true;
+        }
+
+        return false;
     }
 
     private static string PurposeToCode(OtpPurpose p) => p switch

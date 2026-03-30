@@ -1,5 +1,5 @@
 import GradeCell from "./GradeCell";
-import { getEarnedGradePoints, getGradePoint, getOutOfPoints, round2 } from "./gradeUtils";
+import { round2 } from "./gradeUtils";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../../ui/select";
 import { getElectiveOptions, isElectivePlaceholder } from "./electiveOptions";
 
@@ -21,92 +21,11 @@ export default function SemesterTranscriptTable({
   setGrade,
   active,
   setActive,
-  cumulativeBefore,
+  semesterSummary,
   readOnly = false,
 }) {
   const rows = Array.isArray(subjects) ? subjects : [];
-
-  const totals = rows.reduce(
-    (acc, r, rowIndex) => {
-      const thHours = safeNum(r.thHours);
-      const prHours = safeNum(r.prHours);
-      const thCredits = safeNum(r.thCredits);
-      const prCredits = safeNum(r.prCredits);
-
-      const id = r.curriculumSubjectId || r.CurriculumSubjectId || r.id || r.Id || `${semIndex}-${rowIndex}`;
-      const gTh = grades?.[`${id}:th`] || "";
-      const gPr = grades?.[`${id}:pr`] || "";
-
-      const gpTh = thCredits > 0 ? getGradePoint(gTh) : null;
-      const gpPr = prCredits > 0 ? getGradePoint(gPr) : null;
-
-      const egpTh = getEarnedGradePoints(gpTh ?? 0, thCredits);
-      const egpPr = getEarnedGradePoints(gpPr ?? 0, prCredits);
-
-      acc.thHours += thHours;
-      acc.prHours += prHours;
-      acc.thCredits += thCredits;
-      acc.prCredits += prCredits;
-
-      // Excel sheet sums grade points (unweighted) in totals row.
-      if (thCredits > 0 && gpTh !== null) acc.gpThSum += gpTh;
-      if (prCredits > 0 && gpPr !== null) acc.gpPrSum += gpPr;
-
-      acc.egpTh += egpTh;
-      acc.egpPr += egpPr;
-      acc.outTh += getOutOfPoints(thCredits, creditPointScheme);
-      acc.outPr += getOutOfPoints(prCredits, creditPointScheme);
-      return acc;
-    },
-    {
-      thHours: 0,
-      prHours: 0,
-      thCredits: 0,
-      prCredits: 0,
-      gpThSum: 0,
-      gpPrSum: 0,
-      egpTh: 0,
-      egpPr: 0,
-      outTh: 0,
-      outPr: 0,
-    }
-  );
-
-  const semCreditsTotal = totals.thCredits + totals.prCredits;
-  const semEarnedTotal = totals.egpTh + totals.egpPr;
-  const sgpa = semCreditsTotal > 0 ? round2(semEarnedTotal / semCreditsTotal) : 0;
-  const percentage = round2(sgpa * 10);
-
-  const cb = cumulativeBefore || {
-    thHours: 0,
-    prHours: 0,
-    thCredits: 0,
-    prCredits: 0,
-    gpThSum: 0,
-    gpPrSum: 0,
-    egpTh: 0,
-    egpPr: 0,
-    outTh: 0,
-    outPr: 0,
-  };
-
-  const cum = {
-    thHours: cb.thHours + totals.thHours,
-    prHours: cb.prHours + totals.prHours,
-    thCredits: cb.thCredits + totals.thCredits,
-    prCredits: cb.prCredits + totals.prCredits,
-    gpThSum: cb.gpThSum + totals.gpThSum,
-    gpPrSum: cb.gpPrSum + totals.gpPrSum,
-    egpTh: cb.egpTh + totals.egpTh,
-    egpPr: cb.egpPr + totals.egpPr,
-    outTh: cb.outTh + totals.outTh,
-    outPr: cb.outPr + totals.outPr,
-  };
-
-  const cumCreditsTotal = cum.thCredits + cum.prCredits;
-  const cumEarnedTotal = cum.egpTh + cum.egpPr;
-  const cgpa = cumCreditsTotal > 0 ? round2(cumEarnedTotal / cumCreditsTotal) : 0;
-  const cumPercentage = round2(cgpa * 10);
+  const summary = semesterSummary || {};
 
   const focusNext = (rowIndex, part) => {
     if (readOnly) return;
@@ -196,23 +115,18 @@ export default function SemesterTranscriptTable({
               const id = r.curriculumSubjectId || r.CurriculumSubjectId || r.id || r.Id || `${semIndex}-${rowIndex}`;
               const thCredits = safeNum(r.thCredits);
               const prCredits = safeNum(r.prCredits);
-
               const gradeTh = grades?.[`${id}:th`] || "";
               const gradePr = grades?.[`${id}:pr`] || "";
-
-              const gpTh = thCredits > 0 ? getGradePoint(gradeTh) : null;
-              const gpPr = prCredits > 0 ? getGradePoint(gradePr) : null;
-
-              const egpTh = getEarnedGradePoints(gpTh ?? 0, thCredits);
-              const egpPr = getEarnedGradePoints(gpPr ?? 0, prCredits);
-
+              const gpTh = thCredits > 0 ? safeNum(r.thGradePoint) : 0;
+              const gpPr = prCredits > 0 ? safeNum(r.prGradePoint) : 0;
+              const egpTh = safeNum(r.thEarnedGradePoints);
+              const egpPr = safeNum(r.prEarnedGradePoints);
+              const outTh = safeNum(r.thOutOf);
+              const outPr = safeNum(r.prOutOf);
               const rowActive = active?.semIndex === semIndex && active?.rowIndex === rowIndex;
 
               return (
-                <tr
-                  key={`${semIndex}-${rowIndex}`}
-                  className={rowActive ? "bg-blue-50" : "hover:bg-gray-50"}
-                >
+                <tr key={`${semIndex}-${rowIndex}`} className={rowActive ? "bg-blue-50" : "hover:bg-gray-50"}>
                   <td className={`${cellBase} text-center tabular-nums`}>{rowIndex + 1}</td>
                   <td className={`${cellBase} text-left`}>
                     {(() => {
@@ -247,9 +161,7 @@ export default function SemesterTranscriptTable({
                         <div className="leading-tight">
                           <div className="text-gray-900">{selectedLabel || subjectName}</div>
                           {isElective ? (
-                            <div className="mt-1 text-[10px] uppercase tracking-wide text-amber-700">
-                              Elective subject
-                            </div>
+                            <div className="mt-1 text-[10px] uppercase tracking-wide text-amber-700">Elective subject</div>
                           ) : null}
                         </div>
                       );
@@ -266,18 +178,18 @@ export default function SemesterTranscriptTable({
                       readOnly ? (
                         <span className="font-semibold text-gray-900">{gradeTh || "--"}</span>
                       ) : (
-                      <GradeCell
-                        rowIndex={rowIndex}
-                        subjectCode={`${id}:th`}
-                        value={gradeTh}
-                        disabled={false}
-                        triggerId={`grade-${semIndex}-${rowIndex}-th`}
-                        onChange={(_, v) => setGrade?.(id, "th", v)}
-                        onFocusRow={() => setActive?.({ semIndex, rowIndex })}
-                        onMoveDown={() => focusNext(rowIndex, "th")}
-                        placeholder="--"
-                        className="h-7 rounded-none border-black bg-white px-0 text-center text-[12px] font-semibold text-gray-900 shadow-none [&>span[aria-hidden=true]]:hidden"
-                      />
+                        <GradeCell
+                          rowIndex={rowIndex}
+                          subjectCode={`${id}:th`}
+                          value={gradeTh}
+                          disabled={false}
+                          triggerId={`grade-${semIndex}-${rowIndex}-th`}
+                          onChange={(_, v) => setGrade?.(id, "th", v)}
+                          onFocusRow={() => setActive?.({ semIndex, rowIndex })}
+                          onMoveDown={() => focusNext(rowIndex, "th")}
+                          placeholder="--"
+                          className="h-7 rounded-none border-black bg-white px-0 text-center text-[12px] font-semibold text-gray-900 shadow-none [&>span[aria-hidden=true]]:hidden"
+                        />
                       )
                     ) : (
                       <span className="text-gray-700">--</span>
@@ -288,112 +200,104 @@ export default function SemesterTranscriptTable({
                       readOnly ? (
                         <span className="font-semibold text-gray-900">{gradePr || "--"}</span>
                       ) : (
-                      <GradeCell
-                        rowIndex={rowIndex}
-                        subjectCode={`${id}:pr`}
-                        value={gradePr}
-                        disabled={false}
-                        triggerId={`grade-${semIndex}-${rowIndex}-pr`}
-                        onChange={(_, v) => setGrade?.(id, "pr", v)}
-                        onFocusRow={() => setActive?.({ semIndex, rowIndex })}
-                        onMoveDown={() => focusNext(rowIndex, "pr")}
-                        placeholder="--"
-                        className="h-7 rounded-none border-black bg-white px-0 text-center text-[12px] font-semibold text-gray-900 shadow-none [&>span[aria-hidden=true]]:hidden"
-                      />
+                        <GradeCell
+                          rowIndex={rowIndex}
+                          subjectCode={`${id}:pr`}
+                          value={gradePr}
+                          disabled={false}
+                          triggerId={`grade-${semIndex}-${rowIndex}-pr`}
+                          onChange={(_, v) => setGrade?.(id, "pr", v)}
+                          onFocusRow={() => setActive?.({ semIndex, rowIndex })}
+                          onMoveDown={() => focusNext(rowIndex, "pr")}
+                          placeholder="--"
+                          className="h-7 rounded-none border-black bg-white px-0 text-center text-[12px] font-semibold text-gray-900 shadow-none [&>span[aria-hidden=true]]:hidden"
+                        />
                       )
                     ) : (
                       <span className="text-gray-700">--</span>
                     )}
                   </td>
 
-                  <td className={`${cellBase} text-center tabular-nums`}>{gpTh ?? 0}</td>
-                  <td className={`${cellBase} text-center tabular-nums`}>{gpPr ?? 0}</td>
-
+                  <td className={`${cellBase} text-center tabular-nums`}>{gpTh}</td>
+                  <td className={`${cellBase} text-center tabular-nums`}>{gpPr}</td>
                   <td className={`${cellBase} text-center tabular-nums`}>{thCredits > 0 ? round2(egpTh) : 0}</td>
-                  <td className={`${cellBase} text-center tabular-nums`}>{thCredits > 0 ? round2(getOutOfPoints(thCredits, creditPointScheme)) : 0}</td>
+                  <td className={`${cellBase} text-center tabular-nums`}>{thCredits > 0 ? round2(outTh) : 0}</td>
                   <td className={`${cellBase} text-center tabular-nums`}>{prCredits > 0 ? round2(egpPr) : 0}</td>
-                  <td className={`${cellBase} text-center tabular-nums`}>{prCredits > 0 ? round2(getOutOfPoints(prCredits, creditPointScheme)) : 0}</td>
+                  <td className={`${cellBase} text-center tabular-nums`}>{prCredits > 0 ? round2(outPr) : 0}</td>
                 </tr>
               );
             })}
 
-            {/* Semester Total */}
             <tr className="bg-white">
               <td className={`${cellBase} text-center`} />
               <td className={`${cellBase} font-semibold`}>Semester Total</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.thHours)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.prHours)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.thCredits)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.prCredits)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.thHoursTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.prHoursTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.thCreditsTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.prCreditsTotal)}</td>
               <td className={`${cellBase} text-center`}>--</td>
               <td className={`${cellBase} text-center`}>--</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.gpThSum)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.gpPrSum)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.egpTh)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.outTh)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.egpPr)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(totals.outPr)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.thGradePointsSum)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.prGradePointsSum)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.thEarnedGradePointsTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.thOutOfTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.prEarnedGradePointsTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.prOutOfTotal)}</td>
             </tr>
 
-            {/* Semester SGPA / Percentage / EGP */}
             <tr className="bg-white">
               <td className={`${cellBase}`} colSpan={2}>
                 <span className="font-semibold">Semester</span>
                 <span className="ml-2 font-semibold">SGPA</span>
-                <span className="ml-2 tabular-nums">{sgpa}</span>
+                <span className="ml-2 tabular-nums">{round2(summary.sgpa)}</span>
               </td>
               <td className={`${cellBase} text-center`} colSpan={4}>
                 <span className="font-semibold">Percentage</span>
-                <span className="ml-2 tabular-nums">{percentage}</span>
+                <span className="ml-2 tabular-nums">{round2(summary.percentage)}</span>
               </td>
               <td className={`${cellBase} text-center`} colSpan={4}>
                 <span className="font-semibold">EGP</span>
-                <span className="ml-2 tabular-nums">{round2(semEarnedTotal)}</span>
+                <span className="ml-2 tabular-nums">{round2(summary.semesterEarnedGradePoints)}</span>
               </td>
               <td className={`${cellBase}`} colSpan={4} />
             </tr>
 
-            {/* Cumulative Total */}
             <tr className="bg-white">
               <td className={`${cellBase} text-center`} />
               <td className={`${cellBase} font-semibold`}>Cumulative Total</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.thHours)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.prHours)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.thCredits)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.prCredits)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativeThHoursTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativePrHoursTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativeThCreditsTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativePrCreditsTotal)}</td>
               <td className={`${cellBase} text-center`}>--</td>
               <td className={`${cellBase} text-center`}>--</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.gpThSum)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.gpPrSum)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.egpTh)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.outTh)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.egpPr)}</td>
-              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(cum.outPr)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativeThGradePointsSum)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativePrGradePointsSum)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativeThEarnedGradePointsTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativeThOutOfTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativePrEarnedGradePointsTotal)}</td>
+              <td className={`${cellBase} text-center tabular-nums font-semibold`}>{round2(summary.cumulativePrOutOfTotal)}</td>
             </tr>
 
-            {/* Cumulative CGPA / Percentage / EGP */}
             <tr className="bg-white">
               <td className={`${cellBase}`} colSpan={2}>
                 <span className="font-semibold">Cumulative</span>
                 <span className="ml-2 font-semibold">CGPA</span>
-                <span className="ml-2 tabular-nums">{cgpa}</span>
+                <span className="ml-2 tabular-nums">{round2(summary.cgpa)}</span>
               </td>
               <td className={`${cellBase} text-center`} colSpan={4}>
                 <span className="font-semibold">Percentage</span>
-                <span className="ml-2 tabular-nums">{cumPercentage}</span>
+                <span className="ml-2 tabular-nums">{round2(summary.cumulativePercentage)}</span>
               </td>
               <td className={`${cellBase} text-center`} colSpan={4}>
                 <span className="font-semibold">EGP</span>
-                <span className="ml-2 tabular-nums">{round2(cumEarnedTotal)}</span>
+                <span className="ml-2 tabular-nums">{round2(summary.cumulativeEarnedGradePoints)}</span>
               </td>
               <td className={`${cellBase}`} colSpan={4} />
             </tr>
           </tbody>
         </table>
       </div>
-
-      {/* Expose cumulative for parent chaining (optional render-time usage) */}
-      <div className="hidden" data-cumulative={JSON.stringify(cum)} />
     </div>
   );
 }

@@ -97,10 +97,10 @@ export default function ClerkTranscriptRequests() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => navigate(`/clerk/grades?prn=${encodeURIComponent(r.prn || "")}`)}
+                        onClick={() => navigate(`/clerk/verification`)}
                         disabled={!r.prn}
                       >
-                        Open Grade Entry
+                        Open Verification
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -113,4 +113,3 @@ export default function ClerkTranscriptRequests() {
     </div>
   );
 }
-

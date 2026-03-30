@@ -169,7 +169,7 @@ public sealed class ClerkTranscriptRequestsController : ControllerBase
             throw new AppException("Student profile program missing. Ask student to complete Transcript Request form.", 400, "profile_program_missing");
 
         if (!await _docs.AreRequiredApprovedAsync(req.Id, ct))
-            throw new AppException("Student documents are not verified yet. Verify Documents first (Marksheet, Government ID, Authority Letter) before forwarding to HoD.", 400, "documents_not_verified");
+            throw new AppException("Student documents are not verified yet. Verify Marksheets and Government ID before forwarding to HoD. Authority Letter is only needed if the student uploaded one.", 400, "documents_not_verified");
 
         var subjects = await _curriculum.GetByProgramAsync(profile.Program, ct);
         if (subjects.Count == 0)
@@ -192,4 +192,3 @@ public sealed class ClerkTranscriptRequestsController : ControllerBase
         return NoContent();
     }
 }
-

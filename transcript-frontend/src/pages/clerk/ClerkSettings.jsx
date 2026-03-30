@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Moon, Save, Sun, UserCog } from "lucide-react";
 import PageHeader from "../../components/shell/PageHeader";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -9,6 +10,7 @@ import { Label } from "../../components/ui/label";
 import { Switch } from "../../components/ui/switch";
 import { Badge } from "../../components/ui/badge";
 import { useToast } from "../../components/ui/use-toast";
+import { accountService } from "../../services/accountService";
 
 function PreferenceRow({ icon: Icon, title, description, checked, onCheckedChange }) {
   return (
@@ -30,10 +32,54 @@ function PreferenceRow({ icon: Icon, title, description, checked, onCheckedChang
 export default function ClerkSettings() {
   const { toast } = useToast();
   const { isDark, toggleTheme } = useTheme();
-  const [profile, setProfile] = useState({ name: "Clerk User", email: "clerk@msubaroda.ac.in" });
+  const { user, setCurrentUser } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState({ fullName: "", email: "", mobile: "" });
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifPush, setNotifPush] = useState(true);
   const [notifApprovals, setNotifApprovals] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await accountService.getProfile();
+        if (!alive) return;
+        setProfile({
+          fullName: res?.fullName || "",
+          email: res?.email || "",
+          mobile: res?.mobile || "",
+        });
+      } catch (e) {
+        if (!alive) return;
+        toast({ title: "Failed to load profile", description: e?.message || "Unable to load account profile.", variant: "destructive" });
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [toast]);
+
+  const saveProfile = async () => {
+    setSaving(true);
+    try {
+      const updated = await accountService.updateProfile(profile);
+      setProfile({
+        fullName: updated?.fullName || "",
+        email: updated?.email || "",
+        mobile: updated?.mobile || "",
+      });
+      setCurrentUser(updated);
+      toast({ title: "Profile updated", description: "Your clerk profile has been updated everywhere in the app." });
+    } catch (e) {
+      toast({ title: "Save failed", description: e?.message || "Unable to update profile.", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -52,19 +98,25 @@ export default function ClerkSettings() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Full Name</Label>
-                <Input value={profile.name} onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))} />
+                <Input value={profile.fullName} disabled={loading || saving} onChange={(e) => setProfile((p) => ({ ...p, fullName: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Email</Label>
-                <Input value={profile.email} onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))} />
+                <Input value={profile.email} disabled={loading || saving} onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Mobile</Label>
+                <Input value={profile.mobile} disabled={loading || saving} onChange={(e) => setProfile((p) => ({ ...p, mobile: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Input value={user?.role || "Clerk"} disabled />
               </div>
             </div>
             <div className="flex justify-end">
-              <Button
-                onClick={() => toast({ title: "Profile saved", description: "UI preferences updated locally." })}
-              >
+              <Button onClick={saveProfile} disabled={loading || saving}>
                 <Save className="h-4 w-4" />
-                Save Changes
+                {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </CardContent>
@@ -127,4 +179,3 @@ export default function ClerkSettings() {
     </div>
   );
 }
-

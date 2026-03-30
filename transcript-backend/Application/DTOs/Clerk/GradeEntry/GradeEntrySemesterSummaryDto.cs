@@ -1,0 +1,30 @@
+namespace Application.DTOs.Clerk.GradeEntry;
+
+public sealed record GradeEntrySemesterSummaryDto(
+    decimal ThHoursTotal,
+    decimal PrHoursTotal,
+    decimal ThCreditsTotal,
+    decimal PrCreditsTotal,
+    decimal ThGradePointsSum,
+    decimal PrGradePointsSum,
+    decimal ThEarnedGradePointsTotal,
+    decimal PrEarnedGradePointsTotal,
+    decimal ThOutOfTotal,
+    decimal PrOutOfTotal,
+    decimal SemesterEarnedGradePoints,
+    decimal Sgpa,
+    decimal Percentage,
+    decimal CumulativeThHoursTotal,
+    decimal CumulativePrHoursTotal,
+    decimal CumulativeThCreditsTotal,
+    decimal CumulativePrCreditsTotal,
+    decimal CumulativeThGradePointsSum,
+    decimal CumulativePrGradePointsSum,
+    decimal CumulativeThEarnedGradePointsTotal,
+    decimal CumulativePrEarnedGradePointsTotal,
+    decimal CumulativeThOutOfTotal,
+    decimal CumulativePrOutOfTotal,
+    decimal CumulativeEarnedGradePoints,
+    decimal Cgpa,
+    decimal CumulativePercentage
+);

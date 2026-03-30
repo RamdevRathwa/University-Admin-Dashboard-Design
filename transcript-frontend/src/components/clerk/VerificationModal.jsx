@@ -19,6 +19,10 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
   const [remarks, setRemarks] = useState("");
   const student = data?.student;
   const docs = useMemo(() => (data?.documents || []).slice(), [data]);
+  const academicYear =
+    student?.admissionYear && student?.graduationYear
+      ? `${student.admissionYear}-${student.graduationYear}`
+      : "-";
 
   if (!data) return null;
 
@@ -26,9 +30,9 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose?.()}>
-      <DialogContent className="w-full max-w-5xl">
+      <DialogContent className="w-[min(92vw,1120px)]">
         <DialogHeader>
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm text-gray-500">Student Verification</p>
               <DialogTitle className="truncate">
@@ -44,8 +48,8 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
-          <div className="lg:col-span-1 space-y-4">
+        <div className="mt-4 grid grid-cols-1 gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="space-y-4">
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Personal Info</CardTitle>
@@ -68,21 +72,20 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
                 <InfoRow label="Faculty" value={student?.faculty} />
                 <InfoRow label="Department" value={student?.department} />
                 <InfoRow label="Program" value={student?.program} />
-                <InfoRow label="Admission Year" value={student?.admissionYear} />
-                <InfoRow label="Graduation Year" value={student?.graduationYear} />
+                <InfoRow label="Academic Year" value={academicYear} />
               </CardContent>
             </Card>
           </div>
 
-          <div className="lg:col-span-2 space-y-4">
+          <div className="space-y-4">
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Uploaded Documents</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="overflow-hidden rounded-xl border border-gray-200">
                   <Table>
-                    <TableHeader className="sticky top-0 bg-gray-50 z-10">
+                    <TableHeader className="sticky top-0 z-10 bg-gray-50">
                       <TableRow>
                         <TableHead className="w-[180px]">Type</TableHead>
                         <TableHead>File</TableHead>
@@ -95,19 +98,14 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
                         docs.map((d) => (
                           <TableRow key={d.id} className="hover:bg-gray-50">
                             <TableCell className="font-medium">{typeLabel(d.type)}</TableCell>
-                            <TableCell className="truncate max-w-[360px]" title={d.fileName}>
+                            <TableCell className="max-w-[360px] truncate" title={d.fileName}>
                               {d.fileName || "-"}
                             </TableCell>
                             <TableCell>
                               <StatusBadge status={String(d.status || "")} />
                             </TableCell>
                             <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => downloadDocument(d.id)}
-                                disabled={busy}
-                              >
+                              <Button variant="outline" size="sm" onClick={() => downloadDocument(d.id)} disabled={busy}>
                                 Download
                               </Button>
                             </TableCell>
@@ -137,9 +135,7 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
                   placeholder="Add remarks (required for Return)"
                   rows={4}
                 />
-                <p className="text-xs text-gray-500">
-                  Return requires remarks. Approve is allowed without remarks.
-                </p>
+                <p className="text-xs text-gray-500">Return requires remarks. Approve is allowed without remarks.</p>
               </CardContent>
             </Card>
           </div>
@@ -149,11 +145,7 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
           <Button variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={() => onReturn?.(remarks)}
-            disabled={!canAct || !String(remarks || "").trim()}
-          >
+          <Button variant="destructive" onClick={() => onReturn?.(remarks)} disabled={!canAct || !String(remarks || "").trim()}>
             Return to Student
           </Button>
           <Button onClick={() => onApprove?.(remarks)} disabled={!canAct}>
@@ -167,10 +159,9 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
 
 function InfoRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-gray-100 last:border-b-0">
+    <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-2 last:border-b-0">
       <p className="text-xs font-medium text-gray-500">{label}</p>
-      <p className="text-xs text-gray-900 text-right break-words">{value || "-"}</p>
+      <p className="text-xs text-right text-gray-900 break-words">{value || "-"}</p>
     </div>
   );
 }
-

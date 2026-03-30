@@ -9,4 +9,5 @@ public interface IOtpVerificationRepository
     Task<int> CountCreatedSinceAsync(string identifier, DateTimeOffset sinceUtc, CancellationToken ct = default);
     Task AddAsync(OtpVerification otp, CancellationToken ct = default);
     Task MarkUsedAsync(OtpVerification otp, CancellationToken ct = default);
+    Task<bool> IncrementAttemptAsync(OtpVerification otp, int maxAttempts, CancellationToken ct = default);
 }

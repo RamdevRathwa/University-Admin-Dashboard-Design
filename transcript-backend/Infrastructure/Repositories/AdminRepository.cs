@@ -9,6 +9,11 @@ namespace Infrastructure.Repositories;
 
 public sealed class AdminRepository : IAdminRepository
 {
+    private static readonly HashSet<string> AllowedAuditActions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "INSERT", "UPDATE", "DELETE", "LOGIN", "LOGOUT", "APPROVE", "REJECT", "PAYMENT", "DOWNLOAD"
+    };
+
     private readonly V2DbContext _db;
     public AdminRepository(V2DbContext db) => _db = db;
 
@@ -275,7 +280,7 @@ public sealed class AdminRepository : IAdminRepository
         await _db.AuditLogs.AddAsync(new Infrastructure.Persistence.V2.Entities.V2AuditLog
         {
             UserId = userId,
-            ActionType = log.ActionType,
+            ActionType = NormalizeAuditAction(log.ActionType),
             EntityName = log.EntityName,
             EntityKey = log.RecordId,
             OldDataJson = log.OldValue,
@@ -283,6 +288,26 @@ public sealed class AdminRepository : IAdminRepository
             IpAddress = log.IpAddress,
             CreatedAt = log.CreatedAt == default ? DateTimeOffset.UtcNow : log.CreatedAt
         }, ct);
+    }
+
+    private static string NormalizeAuditAction(string? action)
+    {
+        var a = (action ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(a)) return "UPDATE";
+        if (AllowedAuditActions.Contains(a)) return a;
+
+        return a switch
+        {
+            "REGISTER" => "INSERT",
+            "PUBLISH" => "UPDATE",
+            "SAVE_DRAFT" => "UPDATE",
+            "SUBMIT" => "UPDATE",
+            "SUBMIT_TO_HOD" => "UPDATE",
+            "FORWARD_TO_HOD" => "UPDATE",
+            "RETURN" => "UPDATE",
+            "UPLOAD" => "UPDATE",
+            _ => "UPDATE"
+        };
     }
 
     public async Task<PagedResultDto<object>> ListAuditAsync(string? q, string? action, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default)
@@ -294,10 +319,19 @@ public sealed class AdminRepository : IAdminRepository
         var term = (q ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(term))
         {
+            var matchingUserIds = await _db.Users.AsNoTracking()
+                .Where(u =>
+                    u.FullName.Contains(term) ||
+                    (u.Email != null && u.Email.Contains(term)) ||
+                    (u.Mobile != null && u.Mobile.Contains(term)))
+                .Select(u => u.UserId)
+                .ToListAsync(ct);
+
             query = query.Where(x =>
                 (x.EntityName != null && x.EntityName.Contains(term)) ||
                 (x.EntityKey != null && x.EntityKey.Contains(term)) ||
-                x.ActionType.Contains(term));
+                x.ActionType.Contains(term) ||
+                (x.UserId.HasValue && matchingUserIds.Contains(x.UserId.Value)));
         }
 
         var act = (action ?? string.Empty).Trim();

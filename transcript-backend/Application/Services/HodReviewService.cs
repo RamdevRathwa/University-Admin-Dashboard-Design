@@ -4,6 +4,7 @@ using Application.DTOs.Clerk.GradeEntry;
 using Application.DTOs.Dean;
 using Application.DTOs.Transcripts;
 using Application.Interfaces;
+using Domain.Entities;
 using Domain.Enums;
 using Domain.Interfaces;
 
@@ -58,36 +59,17 @@ public sealed class HodReviewService : IHodReviewService
         var gradeEntries = await _grades.GetByStudentIdAsync(student.Id, ct);
         var gradeMap = gradeEntries.ToDictionary(x => x.CurriculumSubjectId, x => x);
 
-        var semesters = subjects
+        var subjectsBySemester = subjects
             .GroupBy(x => x.SemesterNumber)
-            .OrderBy(g => g.Key)
-            .Select(g =>
-            {
-                var semNo = g.Key;
-                var scheme = g.Select(x => x.CreditPointScheme).FirstOrDefault();
-                var yearTitle = BuildYearTitle(profile.Program ?? string.Empty, profile.AdmissionYear, semNo);
-                var termTitle = BuildTermTitle(profile.AdmissionYear, semNo);
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.SubjectCode).ThenBy(x => x.SubjectName).ToList());
 
-                var list = g.OrderBy(x => x.SubjectCode).ThenBy(x => x.SubjectName).Select(s =>
-                {
-                    gradeMap.TryGetValue(s.Id, out var ge);
-                    return new GradeEntrySubjectDto(
-                        s.Id,
-                        (s.SubjectCode ?? string.Empty).Trim(),
-                        s.SubjectName,
-                        s.ThHours,
-                        s.PrHours,
-                        s.ThCredits,
-                        s.PrCredits,
-                        s.CreditPointScheme,
-                        (ge?.ThGrade ?? string.Empty).Trim(),
-                        (ge?.PrGrade ?? string.Empty).Trim()
-                    );
-                }).ToList();
+        var actualMaxSemester = subjectsBySemester.Keys.DefaultIfEmpty(0).Max();
+        var expectedSemesterCount = ResolveExpectedSemesterCount(profile.Program, profile.AdmissionYear, profile.GraduationYear, actualMaxSemester);
+        var gradeOverrides = gradeMap.ToDictionary(
+            x => x.Key,
+            x => ((x.Value.ThGrade ?? string.Empty).Trim(), (x.Value.PrGrade ?? string.Empty).Trim()));
 
-                return new GradeEntrySemesterDto(semNo, yearTitle, termTitle, scheme == 0 ? 10 : scheme, list);
-            })
-            .ToList();
+        var semesters = BuildSemesterDtos(profile.Program ?? string.Empty, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides);
 
         var studentDto = new GradeEntryStudentDto(
             student.Id,
@@ -133,7 +115,12 @@ public sealed class HodReviewService : IHodReviewService
             _ => $"Year-{yearIdx}"
         };
 
-        var ay = admissionYear.HasValue ? $"{admissionYear}-{admissionYear + 1}" : string.Empty;
+        var ay = string.Empty;
+        if (admissionYear.HasValue)
+        {
+            var startYear = admissionYear.Value + (yearIdx - 1);
+            ay = $"{startYear}-{startYear + 1}";
+        }
         return string.IsNullOrWhiteSpace(ay)
             ? $"{label} ({program})"
             : $"{label} ({program})   {ay}";
@@ -146,5 +133,168 @@ public sealed class HodReviewService : IHodReviewService
         var ay = admissionYear.HasValue ? $"{admissionYear + ((semesterNumber - 1) / 2)}" : string.Empty;
         return string.IsNullOrWhiteSpace(ay) ? $"{term} {months}" : $"{term} {months} {ay}";
     }
-}
 
+    private static int ResolveExpectedSemesterCount(string? program, int? admissionYear, int? graduationYear, int actualMaxSemester)
+    {
+        var maxSemester = Math.Max(actualMaxSemester, 0);
+
+        if (admissionYear.HasValue && graduationYear.HasValue && graduationYear.Value >= admissionYear.Value)
+        {
+            var durationYears = graduationYear.Value - admissionYear.Value;
+            if (durationYears > 0)
+                maxSemester = Math.Max(maxSemester, durationYears * 2);
+        }
+
+        var normalizedProgram = (program ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalizedProgram.StartsWith("BE-", StringComparison.Ordinal) ||
+            normalizedProgram.StartsWith("B.E", StringComparison.Ordinal) ||
+            normalizedProgram.StartsWith("BTECH", StringComparison.Ordinal) ||
+            normalizedProgram.StartsWith("B.TECH", StringComparison.Ordinal))
+        {
+            maxSemester = Math.Max(maxSemester, 8);
+        }
+
+        return maxSemester == 0 ? 8 : maxSemester;
+    }
+
+    private static List<GradeEntrySemesterDto> BuildSemesterDtos(
+        string program,
+        int? admissionYear,
+        int? graduationYear,
+        IReadOnlyDictionary<int, List<CurriculumSubject>> subjectsBySemester,
+        int expectedSemesterCount,
+        IReadOnlyDictionary<Guid, (string ThGrade, string PrGrade)> gradeMap)
+    {
+        var cumulative = new RunningTotals();
+        var semesters = new List<GradeEntrySemesterDto>();
+
+        foreach (var semNo in Enumerable.Range(1, expectedSemesterCount))
+        {
+            var semesterSubjects = subjectsBySemester.GetValueOrDefault(semNo) ?? new List<CurriculumSubject>();
+            var scheme = semesterSubjects.Select(x => x.CreditPointScheme).FirstOrDefault();
+            var creditPointScheme = scheme == 0 ? 10 : scheme;
+            var yearTitle = BuildYearTitle(program, admissionYear, semNo);
+            var termTitle = BuildTermTitle(admissionYear, semNo);
+
+            var subjectDtos = new List<GradeEntrySubjectDto>();
+            var semester = new RunningTotals();
+
+            foreach (var s in semesterSubjects)
+            {
+                gradeMap.TryGetValue(s.Id, out var grades);
+                var thGrade = (grades.ThGrade ?? string.Empty).Trim();
+                var prGrade = (grades.PrGrade ?? string.Empty).Trim();
+
+                var thGradePoint = s.ThCredits > 0 ? GradeCalc.GradePoint(thGrade) : 0m;
+                var prGradePoint = s.PrCredits > 0 ? GradeCalc.GradePoint(prGrade) : 0m;
+                var thEarned = GradeCalc.Round2(thGradePoint * s.ThCredits);
+                var prEarned = GradeCalc.Round2(prGradePoint * s.PrCredits);
+                var thOutOf = GradeCalc.ToOutOf(s.ThCredits, creditPointScheme);
+                var prOutOf = GradeCalc.ToOutOf(s.PrCredits, creditPointScheme);
+
+                subjectDtos.Add(new GradeEntrySubjectDto(
+                    s.Id,
+                    (s.SubjectCode ?? string.Empty).Trim(),
+                    s.SubjectName,
+                    s.ThHours,
+                    s.PrHours,
+                    s.ThCredits,
+                    s.PrCredits,
+                    creditPointScheme,
+                    thGrade,
+                    prGrade,
+                    thGradePoint,
+                    prGradePoint,
+                    thEarned,
+                    prEarned,
+                    thOutOf,
+                    prOutOf
+                ));
+
+                semester.ThHours += s.ThHours;
+                semester.PrHours += s.PrHours;
+                semester.ThCredits += s.ThCredits;
+                semester.PrCredits += s.PrCredits;
+                semester.ThGradePointsSum += thGradePoint;
+                semester.PrGradePointsSum += prGradePoint;
+                semester.ThEarned += thEarned;
+                semester.PrEarned += prEarned;
+                semester.ThOutOf += thOutOf;
+                semester.PrOutOf += prOutOf;
+            }
+
+            cumulative.Add(semester);
+
+            var semCredits = semester.ThCredits + semester.PrCredits;
+            var semEarned = semester.ThEarned + semester.PrEarned;
+            var sgpa = semCredits <= 0 ? 0m : GradeCalc.Round2(semEarned / semCredits);
+            var percentage = GradeCalc.Round2(sgpa * 10m);
+
+            var cumCredits = cumulative.ThCredits + cumulative.PrCredits;
+            var cumEarned = cumulative.ThEarned + cumulative.PrEarned;
+            var cgpa = cumCredits <= 0 ? 0m : GradeCalc.Round2(cumEarned / cumCredits);
+            var cumulativePercentage = GradeCalc.Round2(cgpa * 10m);
+
+            var summary = new GradeEntrySemesterSummaryDto(
+                GradeCalc.Round2(semester.ThHours),
+                GradeCalc.Round2(semester.PrHours),
+                GradeCalc.Round2(semester.ThCredits),
+                GradeCalc.Round2(semester.PrCredits),
+                GradeCalc.Round2(semester.ThGradePointsSum),
+                GradeCalc.Round2(semester.PrGradePointsSum),
+                GradeCalc.Round2(semester.ThEarned),
+                GradeCalc.Round2(semester.PrEarned),
+                GradeCalc.Round2(semester.ThOutOf),
+                GradeCalc.Round2(semester.PrOutOf),
+                GradeCalc.Round2(semEarned),
+                sgpa,
+                percentage,
+                GradeCalc.Round2(cumulative.ThHours),
+                GradeCalc.Round2(cumulative.PrHours),
+                GradeCalc.Round2(cumulative.ThCredits),
+                GradeCalc.Round2(cumulative.PrCredits),
+                GradeCalc.Round2(cumulative.ThGradePointsSum),
+                GradeCalc.Round2(cumulative.PrGradePointsSum),
+                GradeCalc.Round2(cumulative.ThEarned),
+                GradeCalc.Round2(cumulative.PrEarned),
+                GradeCalc.Round2(cumulative.ThOutOf),
+                GradeCalc.Round2(cumulative.PrOutOf),
+                GradeCalc.Round2(cumEarned),
+                cgpa,
+                cumulativePercentage
+            );
+
+            semesters.Add(new GradeEntrySemesterDto(semNo, yearTitle, termTitle, creditPointScheme, subjectDtos, summary));
+        }
+
+        return semesters;
+    }
+
+    private sealed class RunningTotals
+    {
+        public decimal ThHours { get; set; }
+        public decimal PrHours { get; set; }
+        public decimal ThCredits { get; set; }
+        public decimal PrCredits { get; set; }
+        public decimal ThGradePointsSum { get; set; }
+        public decimal PrGradePointsSum { get; set; }
+        public decimal ThEarned { get; set; }
+        public decimal PrEarned { get; set; }
+        public decimal ThOutOf { get; set; }
+        public decimal PrOutOf { get; set; }
+
+        public void Add(RunningTotals other)
+        {
+            ThHours += other.ThHours;
+            PrHours += other.PrHours;
+            ThCredits += other.ThCredits;
+            PrCredits += other.PrCredits;
+            ThGradePointsSum += other.ThGradePointsSum;
+            PrGradePointsSum += other.PrGradePointsSum;
+            ThEarned += other.ThEarned;
+            PrEarned += other.PrEarned;
+            ThOutOf += other.ThOutOf;
+            PrOutOf += other.PrOutOf;
+        }
+    }
+}

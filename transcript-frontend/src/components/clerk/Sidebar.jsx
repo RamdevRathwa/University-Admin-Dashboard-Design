@@ -6,9 +6,9 @@ import { LayoutDashboard, FileCheck2, ClipboardList, FileText, CornerDownLeft, S
 
 const items = [
   { name: "Dashboard Home", path: "/clerk/dashboard", icon: LayoutDashboard },
+  { name: "Transcript Requests", path: "/clerk/requests", icon: FileText },
   { name: "Student Academic Verification", path: "/clerk/verification", icon: FileCheck2 },
   { name: "Enter Grades", path: "/clerk/grades", icon: ClipboardList },
-  { name: "Transcript Requests", path: "/clerk/requests", icon: FileText },
   { name: "Rejected / Returned", path: "/clerk/rejected", icon: CornerDownLeft },
   { name: "Settings", path: "/clerk/settings", icon: Settings },
 ];

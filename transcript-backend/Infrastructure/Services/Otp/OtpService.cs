@@ -106,7 +106,7 @@ public sealed class OtpService : IOtpService
         var devKeys = _opt.HashKey?.StartsWith("DEV_ONLY__", StringComparison.Ordinal) ?? false;
         // Dev/testing bypass: accept FixedCode (or fallback 123456 when using DEV_ONLY keys).
         var bypass = (_opt.FixedCode ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(bypass) && (_opt.HashKey?.StartsWith("DEV_ONLY__", StringComparison.Ordinal) ?? false))
+        if (string.IsNullOrWhiteSpace(bypass) && devKeys)
             bypass = "123456";
 
         // If bypass is enabled and matches, skip length/hash checks but still require an active OTP record.
@@ -120,7 +120,7 @@ public sealed class OtpService : IOtpService
         }
 
         if (code.Length != _opt.Length)
-            throw new AppException(devKeys ? $"Invalid OTP (len={code.Length}, expected={_opt.Length})." : "Invalid OTP.");
+            throw new AppException("Invalid OTP.");
 
         var active = await _otps.GetActiveAsync(id, purpose, ct);
         if (active is null) throw new AppException("OTP expired or not found. Please request a new OTP.", 400, "otp_missing");
@@ -133,7 +133,16 @@ public sealed class OtpService : IOtpService
         var computed = HashOtp(salt, id, purpose, code);
 
         if (!FixedTimeEquals(storedHash, computed))
-            throw new AppException($"Invalid OTP (bypassSet={(!string.IsNullOrWhiteSpace(bypass))}, envDevKeys={devKeys}).");
+        {
+            var maxAttempts = Math.Clamp(_opt.MaxVerifyAttemptsPerOtp, 1, 10);
+            var exhausted = await _otps.IncrementAttemptAsync(active, maxAttempts, ct);
+            await _uow.SaveChangesAsync(ct);
+
+            if (exhausted)
+                throw new AppException("Too many invalid OTP attempts. Please request a new OTP.", 429, "otp_attempts_exceeded");
+
+            throw new AppException("Invalid OTP.");
+        }
 
         await _otps.MarkUsedAsync(active, ct);
         await _uow.SaveChangesAsync(ct);

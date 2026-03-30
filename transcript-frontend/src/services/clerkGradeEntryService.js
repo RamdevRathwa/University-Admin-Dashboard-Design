@@ -1,9 +1,23 @@
 import { apiRequest } from "./apiClient";
 
 export const clerkGradeEntryService = {
+  async ready() {
+    return apiRequest("/api/clerk/grade-entry/ready", {
+      method: "GET",
+    });
+  },
+
   async getByPrn(prn) {
     return apiRequest(`/api/clerk/grade-entry/by-prn/${encodeURIComponent(String(prn || "").trim())}`, {
       method: "GET",
+    });
+  },
+
+  async preview(prn, items) {
+    const p = encodeURIComponent(String(prn || "").trim());
+    return apiRequest(`/api/clerk/grade-entry/by-prn/${p}/preview`, {
+      method: "POST",
+      body: { items: Array.isArray(items) ? items : [] },
     });
   },
 

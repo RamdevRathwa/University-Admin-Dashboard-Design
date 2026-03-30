@@ -10,13 +10,18 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
+import { accountService } from "../../services/accountService";
+import { useAuth } from "../../context/AuthContext";
 import PageHeader from "../../components/shell/PageHeader";
 
 export default function SystemSettings() {
   const { toast } = useToast();
+  const { user, setCurrentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profile, setProfile] = useState({ fullName: "", email: "", mobile: "" });
 
   const [settings, setSettings] = useState({
     appName: "Online Transcript Management System",
@@ -33,9 +38,17 @@ export default function SystemSettings() {
       setLoading(true);
       setError("");
       try {
-        const res = await adminService.getSystemSettings();
+        const [res, profileRes] = await Promise.all([
+          adminService.getSystemSettings(),
+          accountService.getProfile(),
+        ]);
         if (!alive) return;
         setSettings((p) => ({ ...p, ...(res || {}) }));
+        setProfile({
+          fullName: profileRes?.fullName || "",
+          email: profileRes?.email || "",
+          mobile: profileRes?.mobile || "",
+        });
       } catch (e) {
         if (!alive) return;
         setError(e?.message || "Failed to load settings.");
@@ -57,6 +70,24 @@ export default function SystemSettings() {
       toast({ title: "Save failed", description: e?.message || "Unable to save settings.", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    setProfileSaving(true);
+    try {
+      const updated = await accountService.updateProfile(profile);
+      setProfile({
+        fullName: updated?.fullName || "",
+        email: updated?.email || "",
+        mobile: updated?.mobile || "",
+      });
+      setCurrentUser(updated);
+      toast({ title: "Profile updated" });
+    } catch (e) {
+      toast({ title: "Profile save failed", description: e?.message || "Unable to update profile.", variant: "destructive" });
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -83,6 +114,38 @@ export default function SystemSettings() {
         title="System Settings"
         description="Configure global application settings for identity, OTP, email, and future payment integration."
       />
+
+      <Card className="rounded-xl">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Admin Profile</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">Update your own account details. Changes reflect across admin views and shared headers.</p>
+            </div>
+            <Button className="rounded-xl bg-[#1e40af] hover:bg-[#1e3a8a]" onClick={saveProfile} disabled={profileSaving}>
+              {profileSaving ? "Saving..." : "Save Profile"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <Label>Full Name</Label>
+            <Input value={profile.fullName} onChange={(e) => setProfile((p) => ({ ...p, fullName: e.target.value }))} className="rounded-xl" />
+          </div>
+          <div className="space-y-1">
+            <Label>Email</Label>
+            <Input value={profile.email} onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))} className="rounded-xl" />
+          </div>
+          <div className="space-y-1">
+            <Label>Mobile</Label>
+            <Input value={profile.mobile} onChange={(e) => setProfile((p) => ({ ...p, mobile: e.target.value }))} className="rounded-xl" />
+          </div>
+          <div className="space-y-1">
+            <Label>Role</Label>
+            <Input value={user?.role || "Admin"} disabled className="rounded-xl" />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="rounded-xl">
         <CardHeader className="pb-3">

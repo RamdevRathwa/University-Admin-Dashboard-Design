@@ -7,6 +7,7 @@ using Infrastructure.Services.Jwt;
 using Infrastructure.Services.Messaging;
 using Infrastructure.Services.Otp;
 using Infrastructure.Services.Documents;
+using Infrastructure.Services.Audit;
 using Infrastructure.Services.Transcripts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -43,6 +44,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITranscriptRepository, TranscriptRepository>();
         services.AddScoped<ITranscriptDocumentRepository, TranscriptDocumentRepository>();
         services.AddScoped<IAdminRepository, AdminRepository>();
+        services.AddScoped<IAuditTrailService, AuditTrailService>();
 
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IOtpService, OtpService>();

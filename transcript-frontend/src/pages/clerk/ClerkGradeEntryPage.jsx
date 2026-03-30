@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Save, Send, RotateCcw } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Alert } from "../../components/ui/alert";
-import SearchBar from "../../components/clerk/SearchBar";
 import SemesterTranscriptTable from "../../components/clerk/grade-entry/SemesterTranscriptTable";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
-import { getEarnedGradePoints, getGradePoint, getOutOfPoints } from "../../components/clerk/grade-entry/gradeUtils";
 import { getElectiveOptions, isElectivePlaceholder } from "../../components/clerk/grade-entry/electiveOptions";
 import { clerkGradeEntryService } from "../../services/clerkGradeEntryService";
+import { clerkRequestsService } from "../../services/clerkRequestsService";
 
 function formatDob(dobValue) {
   const raw = String(dobValue || "").trim();
@@ -31,12 +31,44 @@ function formatDob(dobValue) {
   return raw;
 }
 
+function formatJoinedCourseIn(admissionYear, semesters) {
+  const year = Number(admissionYear);
+  if (Number.isFinite(year) && year > 0) return `July ${year}`;
+
+  const firstTerm = semesters.find((sem) => String(sem?.termTitle || "").trim());
+  const termText = String(firstTerm?.termTitle || "");
+  const yearMatch = termText.match(/\b(20\d{2})\b/);
+  return yearMatch ? `July ${yearMatch[1]}` : "";
+}
+
+function formatCourseDuration(admissionYear, graduationYear, semesters) {
+  const start = Number(admissionYear);
+  const end = Number(graduationYear);
+  if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+    const years = end - start;
+    return `${years} ${years === 1 ? "Year" : "Years"}`;
+  }
+
+  const semesterCount = Array.isArray(semesters) ? semesters.length : 0;
+  if (semesterCount > 0) {
+    const years = Math.max(1, Math.ceil(semesterCount / 2));
+    return `${years} ${years === 1 ? "Year" : "Years"}`;
+  }
+
+  return "";
+}
+
 export default function ClerkGradeEntryPage() {
+  const [searchParams] = useSearchParams();
   const [prn, setPrn] = useState("");
   const [loading, setLoading] = useState(false);
   const [student, setStudent] = useState(null);
   const [semesters, setSemesters] = useState([]);
   const [electiveSelections, setElectiveSelections] = useState({});
+  const [readyStudents, setReadyStudents] = useState([]);
+  const [readyLoading, setReadyLoading] = useState(true);
+  const [readyError, setReadyError] = useState("");
+  const autoLoadedRef = useRef(false);
 
   // Grades keyed by `${semIndex}:${rowIndex}:${part}` where part is 'th' | 'pr'
   const [grades, setGrades] = useState({});
@@ -48,12 +80,13 @@ export default function ClerkGradeEntryPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [remarks, setRemarks] = useState("");
 
-  const loadByPrn = async () => {
-    const p = String(prn || "").trim();
+  const loadByPrn = async (explicitPrn) => {
+    const p = String((explicitPrn ?? prn) || "").trim();
     if (!p) {
       setErrors("PRN is required.");
       return;
     }
+    setPrn(p);
     setErrors("");
     setInfo("");
     setLoading(true);
@@ -69,28 +102,13 @@ export default function ClerkGradeEntryPage() {
       const fullName = s.fullName || s.FullName || "";
       const program = s.program || s.Program || "";
       const admissionYear = s.admissionYear ?? s.AdmissionYear ?? "";
-      const mappedStudent = {
-        name: fullName,
-        prn: s.prn || s.PRN || p,
-        faculty: s.faculty || s.Faculty || "",
-        department: s.department || s.Department || "",
-        program,
-        admissionYear,
-        graduationYear: s.graduationYear ?? s.GraduationYear ?? "",
-        nationality: s.nationality || s.Nationality || "",
-        dob: formatDob(s.dob || s.DOB || ""),
-        birthPlace: s.birthPlace || s.BirthPlace || "",
-        permanentAddress: s.address || s.Address || "",
-        degreeAwarded: program ? `${program}*` : "",
-        joinedCourseIn: admissionYear ? `July ${admissionYear}` : "",
-        courseDuration: "Four Years (Three Years in case of Diploma to Degree Students)",
-      };
-
+      const graduationYear = s.graduationYear ?? s.GraduationYear ?? "";
       const mappedSemesters = (sems || []).map((sem) => ({
         yearTitle: sem.yearTitle || sem.YearTitle || "",
         termTitle: sem.termTitle || sem.TermTitle || "",
         creditPointScheme: sem.creditPointScheme || sem.CreditPointScheme || 10,
         semesterNumber: sem.semesterNumber || sem.SemesterNumber || 0,
+        summary: sem.summary || sem.Summary || null,
         subjects: (sem.subjects || sem.Subjects || []).map((sub) => ({
           curriculumSubjectId: sub.curriculumSubjectId || sub.CurriculumSubjectId,
           code: sub.subjectCode || sub.SubjectCode || "",
@@ -102,8 +120,31 @@ export default function ClerkGradeEntryPage() {
           thGrade: sub.thGrade || sub.ThGrade || "",
           prGrade: sub.prGrade || sub.PrGrade || "",
           isElective: sub.isElective ?? sub.IsElective ?? false,
+          thGradePoint: sub.thGradePoint ?? sub.ThGradePoint ?? 0,
+          prGradePoint: sub.prGradePoint ?? sub.PrGradePoint ?? 0,
+          thEarnedGradePoints: sub.thEarnedGradePoints ?? sub.ThEarnedGradePoints ?? 0,
+          prEarnedGradePoints: sub.prEarnedGradePoints ?? sub.PrEarnedGradePoints ?? 0,
+          thOutOf: sub.thOutOf ?? sub.ThOutOf ?? 0,
+          prOutOf: sub.prOutOf ?? sub.PrOutOf ?? 0,
         })),
       }));
+
+      const mappedStudent = {
+        name: fullName,
+        prn: s.prn || s.PRN || p,
+        faculty: s.faculty || s.Faculty || "",
+        department: s.department || s.Department || "",
+        program,
+        admissionYear,
+        graduationYear,
+        nationality: s.nationality || s.Nationality || "",
+        dob: formatDob(s.dob || s.DOB || ""),
+        birthPlace: s.birthPlace || s.BirthPlace || "",
+        permanentAddress: s.address || s.Address || "",
+        degreeAwarded: program,
+        joinedCourseIn: formatJoinedCourseIn(admissionYear, mappedSemesters),
+        courseDuration: formatCourseDuration(admissionYear, graduationYear, mappedSemesters),
+      };
 
       let savedElectives = {};
       try {
@@ -228,6 +269,47 @@ export default function ClerkGradeEntryPage() {
     return items;
   };
 
+  useEffect(() => {
+    if (!student?.prn || semesters.length === 0) return;
+
+    const handle = window.setTimeout(async () => {
+      try {
+        const preview = await clerkGradeEntryService.preview(student.prn, buildItemsPayload());
+        const sems = preview?.semesters || preview?.Semesters || [];
+        const mappedPreviewSemesters = (sems || []).map((sem) => ({
+          yearTitle: sem.yearTitle || sem.YearTitle || "",
+          termTitle: sem.termTitle || sem.TermTitle || "",
+          creditPointScheme: sem.creditPointScheme || sem.CreditPointScheme || 10,
+          semesterNumber: sem.semesterNumber || sem.SemesterNumber || 0,
+          summary: sem.summary || sem.Summary || null,
+          subjects: (sem.subjects || sem.Subjects || []).map((sub) => ({
+            curriculumSubjectId: sub.curriculumSubjectId || sub.CurriculumSubjectId,
+            code: sub.subjectCode || sub.SubjectCode || "",
+            name: sub.subjectName || sub.SubjectName || "",
+            thHours: sub.thHours || sub.ThHours || 0,
+            prHours: sub.prHours || sub.PrHours || 0,
+            thCredits: sub.thCredits || sub.ThCredits || 0,
+            prCredits: sub.prCredits || sub.PrCredits || 0,
+            thGrade: sub.thGrade || sub.ThGrade || "",
+            prGrade: sub.prGrade || sub.PrGrade || "",
+            isElective: sub.isElective ?? sub.IsElective ?? false,
+            thGradePoint: sub.thGradePoint ?? sub.ThGradePoint ?? 0,
+            prGradePoint: sub.prGradePoint ?? sub.PrGradePoint ?? 0,
+            thEarnedGradePoints: sub.thEarnedGradePoints ?? sub.ThEarnedGradePoints ?? 0,
+            prEarnedGradePoints: sub.prEarnedGradePoints ?? sub.PrEarnedGradePoints ?? 0,
+            thOutOf: sub.thOutOf ?? sub.ThOutOf ?? 0,
+            prOutOf: sub.prOutOf ?? sub.PrOutOf ?? 0,
+          })),
+        }));
+        setSemesters(mappedPreviewSemesters);
+      } catch {
+        // keep current values if preview fails
+      }
+    }, 250);
+
+    return () => window.clearTimeout(handle);
+  }, [grades, student?.prn]);
+
   const saveDraft = async () => {
     if (!student) {
       setErrors("Load a student by PRN to save draft.");
@@ -245,6 +327,81 @@ export default function ClerkGradeEntryPage() {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    let alive = true;
+    setReadyLoading(true);
+    setReadyError("");
+
+    const normalizeStudents = (raw) => {
+      const deduped = [];
+      const seen = new Set();
+
+      raw.forEach((item) => {
+        const itemPrn = String(item?.prn || "").trim();
+        if (!itemPrn || seen.has(itemPrn)) return;
+        seen.add(itemPrn);
+        deduped.push({
+          id: item?.requestId || item?.id,
+          prn: itemPrn,
+          studentName: item?.studentName || "Student",
+          program: item?.program || "",
+          status: item?.status || "Ready",
+        });
+      });
+
+      return deduped;
+    };
+
+    clerkGradeEntryService
+      .ready()
+      .then((data) => {
+        if (!alive) return;
+        const raw = Array.isArray(data?.students) ? data.students : [];
+        setReadyStudents(normalizeStudents(raw));
+      })
+      .catch(async (e) => {
+        if (!alive) return;
+        if (e?.status === 404) {
+          try {
+            const fallback = await clerkRequestsService.queue();
+            if (!alive) return;
+            const raw = Array.isArray(fallback?.requests) ? fallback.requests : [];
+            setReadyStudents(normalizeStudents(raw));
+            setReadyError("");
+            return;
+          } catch (fallbackError) {
+            if (!alive) return;
+            setReadyError(fallbackError?.message || "Failed to load students for grade entry.");
+            return;
+          }
+        }
+
+        setReadyError(e?.message || "Failed to load ready students for grade entry.");
+      })
+      .finally(() => {
+        if (alive) setReadyLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const requestedPrn = String(searchParams.get("prn") || "").trim();
+    if (!requestedPrn || loading) return;
+    if (student?.prn === requestedPrn) return;
+    autoLoadedRef.current = true;
+    loadByPrn(requestedPrn);
+  }, [searchParams, loading, student?.prn]);
+
+  useEffect(() => {
+    if (autoLoadedRef.current || loading || student || readyLoading) return;
+    if (readyStudents.length === 0) return;
+    autoLoadedRef.current = true;
+    loadByPrn(readyStudents[0].prn);
+  }, [readyStudents, readyLoading, loading, student]);
 
   const reset = () => {
     setGrades({});
@@ -301,21 +458,48 @@ export default function ClerkGradeEntryPage() {
       </div>
 
       <Card>
-        <CardContent className="p-4 pt-4">
-          <SearchBar
-            value={prn}
-            onChange={(v) => {
-              setPrn(v);
-              if (errors) setErrors("");
-            }}
-            placeholder="Search by PRN (e.g. 0822053249)"
-            ariaLabel="Search by PRN"
-            rightSlot={
-              <Button type="button" onClick={loadByPrn} disabled={loading} className="px-6">
-                {loading ? "Loading..." : "Fetch"}
-              </Button>
-            }
-          />
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Ready For Grade Entry</CardTitle>
+          <CardDescription>
+            Verified students are listed here automatically. Select a student to load the grade entry sheet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {readyError ? <Alert variant="destructive">{readyError}</Alert> : null}
+          {readyLoading ? (
+            <div className="text-sm text-gray-500">Loading ready students...</div>
+          ) : readyStudents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">
+              No verified students are currently ready for grade entry.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {readyStudents.map((item) => {
+                const isActive = String(student?.prn || "") === item.prn;
+                return (
+                  <button
+                    key={item.prn}
+                    type="button"
+                    onClick={() => loadByPrn(item.prn)}
+                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                      isActive
+                        ? "border-[#1e40af] bg-blue-50"
+                        : "border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/50"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-gray-900">{item.studentName}</div>
+                        <div className="mt-1 text-sm text-gray-600">PRN {item.prn}</div>
+                        <div className="mt-1 text-sm text-gray-500">{item.program || "Program not set"}</div>
+                      </div>
+                      <Badge variant={isActive ? "default" : "neutral"}>{item.status}</Badge>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -395,8 +579,6 @@ export default function ClerkGradeEntryPage() {
 
             <div className="space-y-8">
               {semesters.map((sem, semIndex) => {
-                // Build cumulative totals progressively by reusing the hidden JSON marker isn't ideal in React;
-                // keep it simple: pass cumulativeBefore computed in render order from previous semesters.
                 return (
                   <SemesterTranscriptTable
                     key={`${semIndex}-${sem.termTitle}`}
@@ -412,42 +594,7 @@ export default function ClerkGradeEntryPage() {
                     setGrade={onSetGrade}
                     active={activeCell}
                     setActive={setActiveCell}
-                    cumulativeBefore={
-                      // compute cumulativeBefore by folding earlier semesters (small mock data, ok)
-                      semesters.slice(0, semIndex).reduce(
-                        (acc, s, si) => {
-                          (s.subjects || []).forEach((r, ri) => {
-                            const thHours = Number(r?.thHours) || 0;
-                            const prHours = Number(r?.prHours) || 0;
-                            const thCredits = Number(r?.thCredits) || 0;
-                            const prCredits = Number(r?.prCredits) || 0;
-
-                            const id = r.curriculumSubjectId || `${si}-${ri}`;
-                            const gTh = grades?.[`${id}:th`] || "";
-                            const gPr = grades?.[`${id}:pr`] || "";
-
-                            // local computation in table uses the same helpers; keep minimal here.
-                            // We only need cumulative inputs for CGPA row; earned points depend on grade points.
-                            const gpTh = thCredits > 0 ? getGradePoint(gTh) : null;
-                            const gpPr = prCredits > 0 ? getGradePoint(gPr) : null;
-
-                            if (thCredits > 0 && gpTh !== null) acc.gpThSum += gpTh;
-                            if (prCredits > 0 && gpPr !== null) acc.gpPrSum += gpPr;
-
-                            acc.thHours += thHours;
-                            acc.prHours += prHours;
-                            acc.thCredits += thCredits;
-                            acc.prCredits += prCredits;
-                            acc.egpTh += getEarnedGradePoints(gpTh ?? 0, thCredits);
-                            acc.egpPr += getEarnedGradePoints(gpPr ?? 0, prCredits);
-                            acc.outTh += getOutOfPoints(thCredits, s.creditPointScheme || 10);
-                            acc.outPr += getOutOfPoints(prCredits, s.creditPointScheme || 10);
-                          });
-                          return acc;
-                        },
-                        { thHours: 0, prHours: 0, thCredits: 0, prCredits: 0, gpThSum: 0, gpPrSum: 0, egpTh: 0, egpPr: 0, outTh: 0, outPr: 0 }
-                      )
-                    }
+                    semesterSummary={sem.summary}
                   />
                 );
               })}
@@ -457,8 +604,8 @@ export default function ClerkGradeEntryPage() {
       ) : (
         <Card>
           <CardHeader className="text-center">
-            <CardTitle>No student loaded</CardTitle>
-            <CardDescription>Search by PRN to begin Excel-style grade entry.</CardDescription>
+            <CardTitle>No student selected</CardTitle>
+            <CardDescription>Select a student from the ready list to begin grade entry.</CardDescription>
           </CardHeader>
         </Card>
       )}

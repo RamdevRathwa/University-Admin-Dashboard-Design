@@ -133,45 +133,47 @@ export default function ClerkStudentVerification() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
             <Table>
-              <TableHeader className="sticky top-0 bg-gray-50 z-10">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur">
                 <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead className="w-[140px]">PRN</TableHead>
-                  <TableHead>Program</TableHead>
-                  <TableHead className="w-[140px]">Docs</TableHead>
-                  <TableHead className="w-[180px]">Submitted</TableHead>
-                  <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="w-[120px]" />
+                  <TableHead className="min-w-[260px]">Student</TableHead>
+                  <TableHead className="w-[150px]">PRN</TableHead>
+                  <TableHead className="min-w-[240px]">Program</TableHead>
+                  <TableHead className="w-[150px]">Documents</TableHead>
+                  <TableHead className="w-[190px]">Submitted</TableHead>
+                  <TableHead className="w-[130px]">Status</TableHead>
+                  <TableHead className="w-[140px] text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows && rows.length ? (
                   rows.map((r) => (
-                    <TableRow key={r.requestId} className="hover:bg-gray-50">
-                      <TableCell className="min-w-[240px]">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-gray-900">{r?.student?.name || "-"}</span>
-                          <span className="text-xs text-gray-500">{r?.student?.email || "-"}</span>
+                    <TableRow key={r.requestId} className="align-middle hover:bg-gray-50/70">
+                      <TableCell className="py-4">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-gray-900">{r?.student?.name || "-"}</span>
+                          <span className="text-xs text-gray-500 break-all">{r?.student?.email || "-"}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{r?.student?.prn || "-"}</TableCell>
-                      <TableCell className="text-sm">
-                        <div className="flex flex-col">
-                          <span className="text-gray-900">{r?.student?.program || "-"}</span>
-                          <span className="text-xs text-gray-500">{r?.student?.department || "-"}</span>
+                      <TableCell className="py-4 text-sm font-medium tabular-nums text-gray-900">{r?.student?.prn || "-"}</TableCell>
+                      <TableCell className="py-4 text-sm">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-gray-900">{r?.student?.program || "-"}</span>
+                          {r?.student?.department ? <span className="text-xs text-gray-500">{r.student.department}</span> : null}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">
-                        <span className="text-gray-900">{r?.counts?.pending ?? 0} pending</span>
-                        {r?.counts?.returned ? <span className="text-xs text-red-600 block">{r.counts.returned} returned</span> : null}
+                      <TableCell className="py-4 text-sm">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-gray-900">{r?.counts?.pending ?? 0} pending</span>
+                          {r?.counts?.returned ? <span className="text-xs font-medium text-red-600">{r.counts.returned} returned</span> : null}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-xs text-gray-600">{formatDateTime(r?.createdAt)}</TableCell>
-                      <TableCell>
+                      <TableCell className="py-4 text-xs text-gray-600">{formatDateTime(r?.createdAt)}</TableCell>
+                      <TableCell className="py-4">
                         <StatusBadge status={r?.status || "Pending"} />
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="py-4 text-right">
                         <Button size="sm" onClick={() => openReview(r.requestId)} disabled={busy}>
                           Review
                         </Button>
@@ -180,7 +182,7 @@ export default function ClerkStudentVerification() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-sm text-gray-600">
+                    <TableCell colSpan={7} className="py-10 text-center text-sm text-gray-600">
                       {loading ? "Loading..." : "No records."}
                     </TableCell>
                   </TableRow>
@@ -206,4 +208,3 @@ export default function ClerkStudentVerification() {
     </div>
   );
 }
-

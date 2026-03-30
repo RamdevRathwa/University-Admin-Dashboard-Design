@@ -5,6 +5,6 @@ public sealed record GradeEntrySemesterDto(
     string YearTitle,
     string TermTitle,
     int CreditPointScheme,
-    IReadOnlyList<GradeEntrySubjectDto> Subjects
+    IReadOnlyList<GradeEntrySubjectDto> Subjects,
+    GradeEntrySemesterSummaryDto Summary
 );
-

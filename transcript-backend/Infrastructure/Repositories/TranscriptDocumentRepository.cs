@@ -122,7 +122,7 @@ public sealed class TranscriptDocumentRepository : ITranscriptDocumentRepository
             .Select(x => x.DocumentType)
             .ToListAsync(ct);
 
-        return rows.Contains("Marksheet") && rows.Contains("GovernmentId") && rows.Contains("AuthorityLetter");
+        return rows.Contains("Marksheet") && rows.Contains("GovernmentId");
     }
 
     public async Task<bool> AreRequiredApprovedAsync(Guid requestId, CancellationToken ct = default)
@@ -135,7 +135,7 @@ public sealed class TranscriptDocumentRepository : ITranscriptDocumentRepository
             .Select(x => x.DocumentType)
             .ToListAsync(ct);
 
-        return approved.Contains("Marksheet") && approved.Contains("GovernmentId") && approved.Contains("AuthorityLetter");
+        return approved.Contains("Marksheet") && approved.Contains("GovernmentId");
     }
 
     public async Task<int> CountPendingVerificationsAsync(CancellationToken ct = default)

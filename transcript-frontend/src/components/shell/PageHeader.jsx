@@ -2,7 +2,13 @@ import { cn } from "../../lib/utils";
 
 export default function PageHeader({ title, description, actions, className }) {
   return (
-    <div className={cn("flex flex-col gap-3 md:flex-row md:items-start md:justify-between", className)}>
+    <div
+      className={cn(
+        "rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-5 shadow-sm",
+        "flex flex-col gap-3 md:flex-row md:items-start md:justify-between",
+        className
+      )}
+    >
       <div className="min-w-0">
         <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-slate-100">{title}</h2>
         {description ? <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">{description}</p> : null}
@@ -11,4 +17,3 @@ export default function PageHeader({ title, description, actions, className }) {
     </div>
   );
 }
-

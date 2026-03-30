@@ -1,6 +1,15 @@
 const RAW_BASE_URL = import.meta.env?.VITE_API_BASE_URL;
 const API_BASE_URL = (RAW_BASE_URL ? String(RAW_BASE_URL) : "").replace(/\/+$/, "");
 
+function parseJsonSafely(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 async function request(path, { method = "GET", body, token } = {}) {
   const url = `${API_BASE_URL}${path}`;
   const res = await fetch(url, {
@@ -13,10 +22,10 @@ async function request(path, { method = "GET", body, token } = {}) {
   });
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = parseJsonSafely(text);
 
   if (!res.ok) {
-    const msg = data?.title || data?.message || `Request failed (${res.status})`;
+    const msg = data?.title || data?.message || text || `Request failed (${res.status})`;
     const err = new Error(msg);
     err.status = res.status;
     err.code = data?.code;

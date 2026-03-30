@@ -10,6 +10,11 @@ public sealed record GradeEntrySubjectDto(
     decimal PrCredits,
     int CreditPointScheme,
     string ThGrade,
-    string PrGrade
+    string PrGrade,
+    decimal ThGradePoint,
+    decimal PrGradePoint,
+    decimal ThEarnedGradePoints,
+    decimal PrEarnedGradePoints,
+    decimal ThOutOf,
+    decimal PrOutOf
 );
-

@@ -6,6 +6,7 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { Alert } from "../../components/ui/alert";
 import { apiRequest } from "../../services/apiClient";
 import { studentProfileService } from "../../services/studentProfileService";
+import PageHeader from "../../components/shell/PageHeader";
 
 function formatDob(dobValue) {
   const raw = String(dobValue || "").trim();
@@ -68,12 +69,7 @@ export default function Profile() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Student Profile</h1>
-          <p className="text-sm text-gray-500">Your personal and academic information.</p>
-        </div>
-      </div>
+      <PageHeader title="Student Profile" description="Your personal and academic information." />
 
       {error ? <Alert variant="destructive">{error}</Alert> : null}
 

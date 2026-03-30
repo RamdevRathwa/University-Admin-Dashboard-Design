@@ -150,6 +150,8 @@ public sealed class ClerkVerificationController : ControllerBase
         var dept = prg is null ? null : await _db.Departments.AsNoTracking().FirstOrDefaultAsync(x => x.DepartmentId == prg.DepartmentId, ct);
         var fac = dept is null ? null : await _db.Faculties.AsNoTracking().FirstOrDefaultAsync(x => x.FacultyId == dept.FacultyId, ct);
         var sp = s is null ? null : await _db.StudentProfiles.AsNoTracking().FirstOrDefaultAsync(x => x.StudentId == s.StudentId, ct);
+        var admissionYear = await ResolveYearIntAsync(s?.AdmissionYearId, ct);
+        var graduationYear = await ResolveYearIntAsync(s?.GraduationYearId, ct);
 
         return Ok(new
         {
@@ -165,8 +167,8 @@ public sealed class ClerkVerificationController : ControllerBase
                 faculty = fac?.FacultyName,
                 department = dept?.DeptName,
                 program = prg?.ProgramCode,
-                admissionYear = (int?)null,
-                graduationYear = (int?)null,
+                admissionYear,
+                graduationYear,
                 nationality = sp?.Nationality,
                 dob = sp?.DateOfBirthRaw is null ? (DateOnly?)null : DateOnly.FromDateTime(sp.DateOfBirthRaw.Value),
                 birthPlace = sp?.BirthPlace,
@@ -174,6 +176,18 @@ public sealed class ClerkVerificationController : ControllerBase
             },
             documents = docs
         });
+    }
+
+    private async Task<int?> ResolveYearIntAsync(int? academicYearId, CancellationToken ct)
+    {
+        if (!academicYearId.HasValue) return null;
+        var code = await _db.AcademicYears.AsNoTracking()
+            .Where(x => x.AcademicYearId == academicYearId.Value)
+            .Select(x => x.YearCode)
+            .FirstOrDefaultAsync(ct);
+
+        if (string.IsNullOrWhiteSpace(code) || code.Length < 4) return null;
+        return int.TryParse(code[..4], out var y) ? y : null;
     }
 
     [HttpPost("{requestId:guid}/approve")]

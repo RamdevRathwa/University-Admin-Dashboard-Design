@@ -66,7 +66,7 @@ public sealed class TranscriptService : ITranscriptService
         TranscriptStateMachine.EnsureCanSubmitByStudent(req);
 
         if (!await _documents.HasRequiredUploadsAsync(requestId, ct))
-            throw new AppException("Upload all required documents (Marksheets, Government ID, Authority Letter) before submitting transcript request.", 400, "documents_incomplete");
+            throw new AppException("Upload all required documents (Marksheets and Government ID) before submitting transcript request. Authority Letter is only needed if you are authorizing someone.", 400, "documents_incomplete");
 
         req.Status = TranscriptRequestStatus.Submitted;
         req.CurrentStage = TranscriptStage.Clerk;

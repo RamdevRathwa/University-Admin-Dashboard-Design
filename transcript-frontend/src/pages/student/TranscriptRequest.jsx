@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import { Label } from "../../components/ui/label";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
@@ -15,6 +14,9 @@ import { useToast } from "../../components/ui/use-toast";
 import { studentProfileService } from "../../services/studentProfileService";
 import { transcriptService } from "../../services/transcriptService";
 import { studentDocumentsService } from "../../services/studentDocumentsService";
+import { lookupService } from "../../services/lookupService";
+import { CheckCircle2, Circle, FileCheck2, GraduationCap, UserRound } from "lucide-react";
+import PageHeader from "../../components/shell/PageHeader";
 
 const formatISODate = (d) => {
   const year = d.getFullYear();
@@ -23,9 +25,26 @@ const formatISODate = (d) => {
   return `${year}-${month}-${day}`;
 };
 
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = [".pdf", ".jpg", ".jpeg", ".png"];
+
+function getFileExtension(name) {
+  const raw = String(name || "").trim().toLowerCase();
+  const idx = raw.lastIndexOf(".");
+  return idx >= 0 ? raw.slice(idx) : "";
+}
+
+function isAllowedFile(file) {
+  return ALLOWED_FILE_TYPES.includes(getFileExtension(file?.name));
+}
+
 export default function TranscriptRequest() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const draftStorageKey = useMemo(
+    () => `student-transcript-request-draft:${user?.id || user?.email || "anonymous"}`,
+    [user?.email, user?.id]
+  );
 
   const [step, setStep] = useState("academic"); // academic | personal | documents
   const [submitting, setSubmitting] = useState(false);
@@ -50,46 +69,10 @@ export default function TranscriptRequest() {
     govtId: null,
     authorityLetter: null,
   });
-
-  const faculties = useMemo(
-    () => [
-      { id: "1", name: "Faculty of Technology and Engineering" },
-      { id: "2", name: "Faculty of Management" },
-      { id: "3", name: "Faculty of Science" },
-      { id: "4", name: "Faculty of Arts" },
-    ],
-    []
-  );
-
-  const departments = useMemo(
-    () => [
-      { id: "1", facultyId: "1", name: "Computer Science and Engineering" },
-      { id: "2", facultyId: "1", name: "Mechanical Engineering" },
-      { id: "3", facultyId: "1", name: "Electrical Engineering" },
-      { id: "4", facultyId: "2", name: "Business Administration" },
-      { id: "5", facultyId: "2", name: "Finance" },
-      { id: "6", facultyId: "3", name: "Physics" },
-      { id: "7", facultyId: "3", name: "Chemistry" },
-      { id: "8", facultyId: "4", name: "English Literature" },
-    ],
-    []
-  );
-
-  const programs = useMemo(
-    () => [
-      { id: "1", deptId: "1", name: "BE-CSE" },
-      { id: "2", deptId: "1", name: "MCA" },
-      { id: "3", deptId: "2", name: "BE-ME" },
-      { id: "4", deptId: "3", name: "BE-EE" },
-      { id: "5", deptId: "4", name: "BBA" },
-      { id: "6", deptId: "4", name: "MBA" },
-      { id: "7", deptId: "5", name: "B.Com" },
-      { id: "8", deptId: "6", name: "B.Sc Physics" },
-      { id: "9", deptId: "7", name: "B.Sc Chemistry" },
-      { id: "10", deptId: "8", name: "BA English" },
-    ],
-    []
-  );
+  const [authorizeRepresentative, setAuthorizeRepresentative] = useState("no");
+  const [faculties, setFaculties] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [programs, setPrograms] = useState([]);
 
   const filteredDepartments = useMemo(
     () => departments.filter((d) => d.facultyId === formData.faculty),
@@ -97,14 +80,43 @@ export default function TranscriptRequest() {
   );
 
   const filteredPrograms = useMemo(
-    () => programs.filter((p) => p.deptId === formData.department),
+    () => programs.filter((p) => p.departmentId === formData.department),
     [programs, formData.department]
   );
+
+  const selectedProgram = useMemo(
+    () => programs.find((p) => p.id === formData.program) || null,
+    [programs, formData.program]
+  );
+
+  const selectedFaculty = useMemo(
+    () => faculties.find((f) => f.id === formData.faculty) || null,
+    [faculties, formData.faculty]
+  );
+
+  const selectedDepartment = useMemo(
+    () => departments.find((d) => d.id === formData.department) || null,
+    [departments, formData.department]
+  );
+
+  const selectedProgramDuration = selectedProgram?.durationYears || 0;
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 25 }, (_, i) => String(currentYear - i));
   }, []);
+
+  const academicYearOptions = useMemo(() => {
+    if (!selectedProgramDuration) return [];
+    return yearOptions.map((startYear) => {
+      const start = Number(startYear);
+      const end = start + selectedProgramDuration;
+      return {
+        value: String(start),
+        label: `${start}-${end}`,
+      };
+    });
+  }, [selectedProgramDuration, yearOptions]);
 
   const isValidISODate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || "").trim());
 
@@ -131,6 +143,176 @@ export default function TranscriptRequest() {
 
   const nameById = (list, id) => list.find((x) => String(x.id) === String(id))?.name || "";
   const idByName = (list, name) => list.find((x) => String(x.name) === String(name))?.id || "";
+
+  const academicCompletion = useMemo(() => {
+    const checks = [
+      !!String(formData.prn || "").trim(),
+      !!formData.faculty,
+      !!formData.department,
+      !!formData.program,
+      !!formData.admissionYear && !!formData.graduationYear,
+      !!selectedProgramDuration,
+    ];
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }, [formData, selectedProgramDuration]);
+
+  const personalCompletion = useMemo(() => {
+    const checks = [
+      !!formData.nationality,
+      !!formData.dob,
+      !!String(formData.birthPlace || "").trim(),
+      !!String(formData.address || "").trim(),
+    ];
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }, [formData]);
+
+  const documentCompletion = useMemo(() => {
+    const checks = [
+      Array.isArray(documents.marksheets) && documents.marksheets.length > 0,
+      !!documents.govtId,
+      authorizeRepresentative === "no" || !!documents.authorityLetter,
+    ];
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }, [authorizeRepresentative, documents]);
+
+  const overallCompletion = useMemo(() => {
+    return Math.round((academicCompletion + personalCompletion + documentCompletion) / 3);
+  }, [academicCompletion, personalCompletion, documentCompletion]);
+
+  const steps = useMemo(
+    () => [
+      {
+        key: "academic",
+        title: "Step 1",
+        label: "Academic Information",
+        description: "Confirm PRN, faculty, department, program, and academic years.",
+        percent: academicCompletion,
+        icon: GraduationCap,
+      },
+      {
+        key: "personal",
+        title: "Step 2",
+        label: "Personal Details",
+        description: "Complete nationality, date of birth, birth place, and address.",
+        percent: personalCompletion,
+        icon: UserRound,
+      },
+      {
+        key: "documents",
+        title: "Step 3",
+        label: "Document Uploads",
+        description: "Upload marksheets, government ID, and an authority letter only when needed.",
+        percent: documentCompletion,
+        icon: FileCheck2,
+      },
+    ],
+    [academicCompletion, personalCompletion, documentCompletion]
+  );
+
+  const currentStepIndex = steps.findIndex((item) => item.key === step);
+
+  const buildProfileDto = () => ({
+    prn: String(formData.prn || "").trim(),
+    faculty: nameById(faculties, formData.faculty),
+    department: nameById(departments, formData.department),
+    program: nameById(programs, formData.program),
+    admissionYear: formData.admissionYear ? Number(formData.admissionYear) : null,
+    graduationYear: formData.graduationYear ? Number(formData.graduationYear) : null,
+    nationality: nameById(countries, formData.nationality),
+    dob: formData.dob || null,
+    birthPlace: String(formData.birthPlace || "").trim(),
+    address: String(formData.address || "").trim(),
+  });
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(draftStorageKey);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      if (parsed?.formData) {
+        setFormData((prev) => ({ ...prev, ...parsed.formData }));
+      }
+      if (parsed?.authorizeRepresentative === "yes" || parsed?.authorizeRepresentative === "no") {
+        setAuthorizeRepresentative(parsed.authorizeRepresentative);
+      }
+      if (["academic", "personal", "documents"].includes(parsed?.step)) {
+        setStep(parsed.step);
+      }
+    } catch {
+      // ignore invalid local draft
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFaculties = async () => {
+      try {
+        const res = await lookupService.listFaculties();
+        if (cancelled) return;
+        setFaculties(Array.isArray(res?.items) ? res.items : []);
+      } catch {
+        if (cancelled) return;
+        setFaculties([]);
+      }
+    };
+
+    loadFaculties();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDepartments = async () => {
+      if (!formData.faculty) {
+        setDepartments([]);
+        return;
+      }
+
+      try {
+        const res = await lookupService.listDepartments(formData.faculty);
+        if (cancelled) return;
+        setDepartments(Array.isArray(res?.items) ? res.items : []);
+      } catch {
+        if (cancelled) return;
+        setDepartments([]);
+      }
+    };
+
+    loadDepartments();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.faculty]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPrograms = async () => {
+      if (!formData.department) {
+        setPrograms([]);
+        return;
+      }
+
+      try {
+        const res = await lookupService.listPrograms(formData.department);
+        if (cancelled) return;
+        setPrograms(Array.isArray(res?.items) ? res.items : []);
+      } catch {
+        if (cancelled) return;
+        setPrograms([]);
+      }
+    };
+
+    loadPrograms();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.department]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,14 +346,39 @@ export default function TranscriptRequest() {
     };
   }, [faculties, departments, programs, countries]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          formData,
+          authorizeRepresentative,
+          step,
+        })
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [authorizeRepresentative, draftStorageKey, formData, step]);
+
   const setField = (name, value) => {
     setFormData((p) => {
       const next = { ...p, [name]: value };
       if (name === "faculty") {
         next.department = "";
         next.program = "";
+        next.admissionYear = "";
+        next.graduationYear = "";
       }
-      if (name === "department") next.program = "";
+      if (name === "department") {
+        next.program = "";
+        next.admissionYear = "";
+        next.graduationYear = "";
+      }
+      if (name === "program") {
+        next.admissionYear = "";
+        next.graduationYear = "";
+      }
       return next;
     });
     if (errors[name]) setErrors((p) => ({ ...p, [name]: null }));
@@ -185,36 +392,68 @@ export default function TranscriptRequest() {
   const getStepErrors = (s) => {
     const next = {};
     if (s === "academic") {
-      if (!String(formData.prn || "").trim()) next.prn = "PRN is required";
+      const prn = String(formData.prn || "").trim();
+      if (!prn) next.prn = "PRN is required";
+      else if (!/^\d{10}$/.test(prn)) next.prn = "PRN must be exactly 10 digits";
       if (!formData.faculty) next.faculty = "Select a faculty";
       if (!formData.department) next.department = "Select a department";
       if (!formData.program) next.program = "Select a program";
-      if (!formData.admissionYear) next.admissionYear = "Admission year is required";
-      if (!formData.graduationYear) next.graduationYear = "Graduation year is required";
-      if (formData.admissionYear && formData.graduationYear) {
-        if (Number(formData.graduationYear) <= Number(formData.admissionYear)) next.graduationYear = "Graduation year must be after admission year";
-      }
+      if (!formData.admissionYear) next.admissionYear = "Academic year is required";
+      if (!formData.graduationYear) next.admissionYear = "Select a valid academic year";
     }
     if (s === "personal") {
       if (!formData.nationality) next.nationality = "Nationality is required";
       if (!formData.dob) next.dob = "Date of birth is required";
-      if (!String(formData.birthPlace || "").trim()) next.birthPlace = "Birth place is required";
-      if (!String(formData.address || "").trim()) next.address = "Permanent address is required";
+      else {
+        const dob = new Date(formData.dob);
+        const today = new Date();
+        if (Number.isNaN(dob.getTime())) next.dob = "Enter a valid date of birth";
+        else if (dob > today) next.dob = "Date of birth cannot be in the future";
+      }
+
+      const birthPlace = String(formData.birthPlace || "").trim();
+      if (!birthPlace) next.birthPlace = "Birth place is required";
+      else if (birthPlace.length < 2) next.birthPlace = "Birth place is too short";
+
+      const address = String(formData.address || "").trim();
+      if (!address) next.address = "Permanent address is required";
+      else if (address.length < 10) next.address = "Permanent address is too short";
     }
     if (s === "documents") {
       if (!documents.marksheets || documents.marksheets.length === 0) next.marksheets = "Upload at least one marksheet";
+      else if (documents.marksheets.some((file) => !isAllowedFile(file))) next.marksheets = "Marksheets must be PDF, JPG, JPEG, or PNG files";
+      else if (documents.marksheets.some((file) => file.size > MAX_FILE_SIZE)) next.marksheets = "Each marksheet file must be 20 MB or smaller";
+
       if (!documents.govtId) next.govtId = "Government ID is required";
-      if (!documents.authorityLetter) next.authorityLetter = "Authority letter is required";
+      else if (!isAllowedFile(documents.govtId)) next.govtId = "Government ID must be PDF, JPG, JPEG, or PNG";
+      else if (documents.govtId.size > MAX_FILE_SIZE) next.govtId = "Government ID file must be 20 MB or smaller";
+
+      if (authorizeRepresentative === "yes") {
+        if (!documents.authorityLetter) next.authorityLetter = "Authority letter is required when you authorize someone";
+        else if (!isAllowedFile(documents.authorityLetter)) next.authorityLetter = "Authority letter must be PDF, JPG, JPEG, or PNG";
+        else if (documents.authorityLetter.size > MAX_FILE_SIZE) next.authorityLetter = "Authority letter file must be 20 MB or smaller";
+      }
     }
     return next;
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     const nextErrors = getStepErrors(step);
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
+
+    if (step === "academic" || step === "personal") {
+      try {
+        await studentProfileService.upsertMyProfile(buildProfileDto());
+        toast({ title: "Progress saved", description: `${step === "academic" ? "Academic information" : "Personal details"} saved successfully.` });
+      } catch (err) {
+        setErrors({ submit: err?.message || "Failed to save your progress." });
+        return;
+      }
+    }
+
     setErrors({});
     setStep((p) => (p === "academic" ? "personal" : p === "personal" ? "documents" : "documents"));
   };
@@ -250,18 +489,7 @@ export default function TranscriptRequest() {
     setSubmitting(true);
 
     try {
-      const dto = {
-        prn: String(formData.prn || "").trim(),
-        faculty: nameById(faculties, formData.faculty),
-        department: nameById(departments, formData.department),
-        program: nameById(programs, formData.program),
-        admissionYear: formData.admissionYear ? Number(formData.admissionYear) : null,
-        graduationYear: formData.graduationYear ? Number(formData.graduationYear) : null,
-        nationality: nameById(countries, formData.nationality),
-        dob: formData.dob || null,
-        birthPlace: String(formData.birthPlace || "").trim(),
-        address: String(formData.address || "").trim(),
-      };
+      const dto = buildProfileDto();
 
       await studentProfileService.upsertMyProfile(dto);
       const draft = await transcriptService.createDraft();
@@ -269,9 +497,17 @@ export default function TranscriptRequest() {
 
       await studentDocumentsService.upload(requestId, "Marksheet", documents.marksheets || []);
       await studentDocumentsService.upload(requestId, "GovernmentId", documents.govtId ? [documents.govtId] : []);
-      await studentDocumentsService.upload(requestId, "AuthorityLetter", documents.authorityLetter ? [documents.authorityLetter] : []);
+      if (authorizeRepresentative === "yes" && documents.authorityLetter) {
+        await studentDocumentsService.upload(requestId, "AuthorityLetter", [documents.authorityLetter]);
+      }
 
       const submitted = await transcriptService.submitRequest(requestId);
+
+      try {
+        window.localStorage.removeItem(draftStorageKey);
+      } catch {
+        // ignore storage errors
+      }
 
       toast({ title: "Request submitted", description: `Reference ID: ${submitted?.id || submitted?.Id}` });
     } catch (err) {
@@ -283,33 +519,102 @@ export default function TranscriptRequest() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">New Transcript Request</h1>
-          <p className="text-sm text-gray-500">Complete all steps to submit your transcript request.</p>
-        </div>
-        <Badge variant="default">Student Account</Badge>
-      </div>
+      <PageHeader
+        title="New Transcript Request"
+        description="Complete each section in order and submit your transcript request once all required details are provided."
+        actions={<Badge variant="default">Student Account</Badge>}
+      />
 
       <Card>
         <CardHeader>
-          <CardTitle>Transcript Request Form</CardTitle>
-          <CardDescription>Academic, personal details and document upload are required to submit.</CardDescription>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <CardTitle>Transcript Request Form</CardTitle>
+              <CardDescription>Academic details, personal information, and the required documents must be completed before submission.</CardDescription>
+            </div>
+            <div className="min-w-[220px] rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#1e40af]">Overall Completion</p>
+              <div className="mt-1 flex items-center justify-between">
+                <p className="text-2xl font-bold text-[#1e3a8a]">{overallCompletion}%</p>
+                <p className="text-sm text-[#1e40af]">{currentStepIndex + 1} of {steps.length} steps</p>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100">
+                <div className="h-full rounded-full bg-[#1e40af] transition-all" style={{ width: `${overallCompletion}%` }} />
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={step} onValueChange={setStep}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="academic">Academic</TabsTrigger>
-              <TabsTrigger value="personal">Personal</TabsTrigger>
-              <TabsTrigger value="documents">Documents</TabsTrigger>
-            </TabsList>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {steps.map((item, index) => {
+              const Icon = item.icon;
+              const active = item.key === step;
+              const completed = item.percent === 100;
 
-            <form onSubmit={submit} className="mt-6 space-y-6">
-              <TabsContent value="academic">
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setStep(item.key)}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? "border-[#1e40af] bg-blue-50 shadow-sm"
+                      : "border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.title}</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{item.label}</p>
+                    </div>
+                    <div className={`rounded-full p-2 ${active ? "bg-[#1e40af] text-white" : "bg-gray-100 text-gray-600"}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-600">{item.description}</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm">
+                      {completed ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Circle className="h-4 w-4 text-gray-400" />}
+                      <span className={completed ? "text-green-700" : "text-gray-500"}>
+                        {completed ? "Completed" : `${item.percent}% complete`}
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">{item.percent}%</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={`h-full rounded-full transition-all ${completed ? "bg-green-500" : "bg-[#1e40af]"}`}
+                      style={{ width: `${item.percent}%` }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <form onSubmit={submit} className="mt-6 space-y-6">
+            {step === "academic" ? (
+              <Card className="border-blue-100 bg-blue-50/40 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Step 1: Academic Information</CardTitle>
+                  <CardDescription>Provide your program and academic timeline so the request can be mapped correctly.</CardDescription>
+                </CardHeader>
+                <CardContent>
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="prn">PRN</Label>
-                    <Input id="prn" value={formData.prn} onChange={(e) => setField("prn", e.target.value)} placeholder="Enter PRN" aria-invalid={!!errors.prn} />
+                    <Input
+                      id="prn"
+                      value={formData.prn}
+                      onChange={(e) => {
+                        const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setField("prn", digitsOnly);
+                      }}
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="Enter PRN"
+                      aria-invalid={!!errors.prn}
+                    />
                     {errors.prn ? <p className="text-xs text-red-600">{errors.prn}</p> : null}
                   </div>
 
@@ -318,11 +623,11 @@ export default function TranscriptRequest() {
                       <Label>Faculty</Label>
                       <Select value={formData.faculty} onValueChange={(v) => setField("faculty", v)}>
                         <SelectTrigger aria-invalid={!!errors.faculty}>
-                          <SelectValue placeholder="Select faculty" />
+                          <SelectValue placeholder={selectedFaculty?.name || "Select faculty"} />
                         </SelectTrigger>
                         <SelectContent>
                           {faculties.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>
+                            <SelectItem key={f.id} value={f.id} textValue={f.name}>
                               {f.name}
                             </SelectItem>
                           ))}
@@ -335,11 +640,11 @@ export default function TranscriptRequest() {
                       <Label>Department</Label>
                       <Select value={formData.department} onValueChange={(v) => setField("department", v)} disabled={!formData.faculty}>
                         <SelectTrigger aria-invalid={!!errors.department}>
-                          <SelectValue placeholder="Select department" />
+                          <SelectValue placeholder={selectedDepartment?.name || "Select department"} />
                         </SelectTrigger>
                         <SelectContent>
                           {filteredDepartments.map((d) => (
-                            <SelectItem key={d.id} value={d.id}>
+                            <SelectItem key={d.id} value={d.id} textValue={d.name}>
                               {d.name}
                             </SelectItem>
                           ))}
@@ -351,13 +656,13 @@ export default function TranscriptRequest() {
 
                   <div className="space-y-2">
                     <Label>Program</Label>
-                    <Select value={formData.program} onValueChange={(v) => setField("program", v)} disabled={!formData.department}>
-                      <SelectTrigger aria-invalid={!!errors.program}>
-                        <SelectValue placeholder="Select program" />
+                      <Select value={formData.program} onValueChange={(v) => setField("program", v)} disabled={!formData.department}>
+                        <SelectTrigger aria-invalid={!!errors.program}>
+                          <SelectValue placeholder={selectedProgram?.name || "Select program"} />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredPrograms.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
+                          <SelectItem key={p.id} value={p.id} textValue={p.name}>
                             {p.name}
                           </SelectItem>
                         ))}
@@ -368,15 +673,24 @@ export default function TranscriptRequest() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Admission Year</Label>
-                      <Select value={formData.admissionYear} onValueChange={(v) => setField("admissionYear", v)}>
+                      <Label>Academic Year</Label>
+                      <Select
+                        value={formData.admissionYear}
+                        onValueChange={(v) => {
+                          const start = Number(v);
+                          const end = start + (selectedProgramDuration || 0);
+                          setField("admissionYear", v);
+                          setField("graduationYear", String(end));
+                        }}
+                        disabled={!selectedProgramDuration}
+                      >
                         <SelectTrigger aria-invalid={!!errors.admissionYear}>
-                          <SelectValue placeholder="Select year" />
+                          <SelectValue placeholder={selectedProgramDuration ? "Select academic year" : "Select program first"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {yearOptions.map((y) => (
-                            <SelectItem key={y} value={y}>
-                              {y}
+                          {academicYearOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -385,26 +699,22 @@ export default function TranscriptRequest() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Graduation Year</Label>
-                      <Select value={formData.graduationYear} onValueChange={(v) => setField("graduationYear", v)}>
-                        <SelectTrigger aria-invalid={!!errors.graduationYear}>
-                          <SelectValue placeholder="Select year" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {yearOptions.map((y) => (
-                            <SelectItem key={y} value={y}>
-                              {y}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.graduationYear ? <p className="text-xs text-red-600">{errors.graduationYear}</p> : null}
+                      <Label>Program Duration</Label>
+                      <Input value={selectedProgramDuration ? `${selectedProgramDuration} Years` : ""} placeholder="Auto calculated from program" readOnly />
                     </div>
                   </div>
                 </div>
-              </TabsContent>
+                </CardContent>
+              </Card>
+            ) : null}
 
-              <TabsContent value="personal">
+            {step === "personal" ? (
+              <Card className="border-blue-100 bg-blue-50/40 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Step 2: Personal Details</CardTitle>
+                  <CardDescription>Make sure your identity and address details are complete before submission.</CardDescription>
+                </CardHeader>
+                <CardContent>
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <Label>Nationality</Label>
@@ -479,39 +789,87 @@ export default function TranscriptRequest() {
                     {errors.address ? <p className="text-xs text-red-600">{errors.address}</p> : null}
                   </div>
                 </div>
-              </TabsContent>
+                </CardContent>
+              </Card>
+            ) : null}
 
-              <TabsContent value="documents">
+            {step === "documents" ? (
+              <Card className="border-blue-100 bg-blue-50/40 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Step 3: Document Uploads</CardTitle>
+                  <CardDescription>Upload your marksheets and government ID. Add an authority letter only if someone is authorized to act on your behalf.</CardDescription>
+                </CardHeader>
+                <CardContent>
                 <div className="space-y-6">
-                  <Card className="shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Upload Documents</CardTitle>
-                      <CardDescription>Upload all required documents to proceed.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="marksheets">Marksheets (Multiple)</Label>
-                        <Input
-                          id="marksheets"
-                          type="file"
-                          multiple
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => setDoc("marksheets", Array.from(e.target.files || []))}
-                        />
-                        {errors.marksheets ? <p className="text-xs text-red-600">{errors.marksheets}</p> : null}
-                      </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Marksheets</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{documents.marksheets?.length || 0}</p>
+                      <p className="mt-1 text-sm text-gray-500">files selected</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Government ID</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{documents.govtId ? "1" : "0"}</p>
+                      <p className="mt-1 text-sm text-gray-500">file selected</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Authority Letter</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{authorizeRepresentative === "yes" ? (documents.authorityLetter ? "1" : "0") : "Optional"}</p>
+                      <p className="mt-1 text-sm text-gray-500">{authorizeRepresentative === "yes" ? "file selected" : "not required"}</p>
+                    </div>
+                  </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="govtId">Government ID</Label>
-                        <Input
-                          id="govtId"
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => setDoc("govtId", (e.target.files && e.target.files[0]) || null)}
-                        />
-                        {errors.govtId ? <p className="text-xs text-red-600">{errors.govtId}</p> : null}
+                  <div className="space-y-6 rounded-2xl border border-gray-200 bg-white p-5">
+                    <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                      <div className="space-y-1">
+                        <Label>Are you authorizing another person to act on your behalf?</Label>
+                        <p className="text-sm text-gray-600">If you select Yes, you will need to upload an authority letter.</p>
                       </div>
+                      <div className="flex flex-wrap gap-3">
+                        <Button
+                          type="button"
+                          variant={authorizeRepresentative === "no" ? "default" : "outline"}
+                          onClick={() => {
+                            setAuthorizeRepresentative("no");
+                            setDoc("authorityLetter", null);
+                          }}
+                        >
+                          No
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={authorizeRepresentative === "yes" ? "default" : "outline"}
+                          onClick={() => setAuthorizeRepresentative("yes")}
+                        >
+                          Yes
+                        </Button>
+                      </div>
+                    </div>
 
+                    <div className="space-y-2">
+                      <Label htmlFor="marksheets">Marksheets (Multiple)</Label>
+                      <Input
+                        id="marksheets"
+                        type="file"
+                        multiple
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => setDoc("marksheets", Array.from(e.target.files || []))}
+                      />
+                      {errors.marksheets ? <p className="text-xs text-red-600">{errors.marksheets}</p> : null}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="govtId">Government ID</Label>
+                      <Input
+                        id="govtId"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => setDoc("govtId", (e.target.files && e.target.files[0]) || null)}
+                      />
+                      {errors.govtId ? <p className="text-xs text-red-600">{errors.govtId}</p> : null}
+                    </div>
+
+                    {authorizeRepresentative === "yes" ? (
                       <div className="space-y-2">
                         <Label htmlFor="authorityLetter">Authority Letter</Label>
                         <Input
@@ -522,15 +880,21 @@ export default function TranscriptRequest() {
                         />
                         {errors.authorityLetter ? <p className="text-xs text-red-600">{errors.authorityLetter}</p> : null}
                       </div>
-                    </CardContent>
-                  </Card>
+                    ) : null}
+                  </div>
                 </div>
-              </TabsContent>
+                </CardContent>
+              </Card>
+            ) : null}
 
-              {errors.submit ? <Alert variant="destructive">{errors.submit}</Alert> : null}
+            {errors.submit ? <Alert variant="destructive">{errors.submit}</Alert> : null}
 
-              <Separator />
+            <Separator />
 
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-gray-500">
+                Current progress: <span className="font-semibold text-gray-900">{steps[currentStepIndex]?.label}</span>
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <Button type="button" variant="outline" disabled={step === "academic" || submitting} onClick={goPrev}>
                   Previous
@@ -538,7 +902,7 @@ export default function TranscriptRequest() {
 
                 {step !== "documents" ? (
                   <Button type="button" disabled={submitting} onClick={goNext}>
-                    Next
+                    Save and Continue
                   </Button>
                 ) : (
                   <Button type="submit" disabled={submitting}>
@@ -546,8 +910,8 @@ export default function TranscriptRequest() {
                   </Button>
                 )}
               </div>
-            </form>
-          </Tabs>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

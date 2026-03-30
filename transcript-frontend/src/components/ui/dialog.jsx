@@ -46,11 +46,14 @@ export function DialogContent({ className, children, ...props }) {
   return (
     <dialog
       ref={ref}
-      className={cn("rounded-xl border border-gray-200 p-0 shadow-xl backdrop:bg-black/40", className)}
+      className={cn(
+        "fixed left-1/2 top-1/2 m-0 w-[min(92vw,1100px)] max-h-[88vh] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl backdrop:bg-black/45",
+        className
+      )}
       onClose={() => ctx?.onOpenChange?.(false)}
       {...props}
     >
-      <div className="p-6">{children}</div>
+      <div className="max-h-[88vh] overflow-y-auto p-6">{children}</div>
     </dialog>
   );
 }
@@ -70,4 +73,3 @@ export function DialogDescription({ className, ...props }) {
 export function DialogFooter({ className, ...props }) {
   return <div className={cn("mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3", className)} {...props} />;
 }
-

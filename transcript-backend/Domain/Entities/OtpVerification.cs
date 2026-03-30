@@ -14,6 +14,7 @@ public sealed class OtpVerification
     // Stores "salt:hash" (hash is HMACSHA256). Never store raw OTP in production.
     public string OtpCode { get; set; } = string.Empty;
 
+    public int Attempts { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
     public bool IsUsed { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

@@ -12,13 +12,15 @@ public sealed class AuthService : IAuthService
     private readonly IUserRepository _users;
     private readonly IOtpService _otp;
     private readonly IJwtService _jwt;
+    private readonly IAuditTrailService _audit;
     private readonly IUnitOfWork _uow;
 
-    public AuthService(IUserRepository users, IOtpService otp, IJwtService jwt, IUnitOfWork uow)
+    public AuthService(IUserRepository users, IOtpService otp, IJwtService jwt, IAuditTrailService audit, IUnitOfWork uow)
     {
         _users = users;
         _otp = otp;
         _jwt = jwt;
+        _audit = audit;
         _uow = uow;
     }
 
@@ -59,6 +61,15 @@ public sealed class AuthService : IAuthService
 
         await _users.AddAsync(user, ct);
         await _uow.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "REGISTER",
+            "Auth",
+            user.Id.ToString(),
+            null,
+            System.Text.Json.JsonSerializer.Serialize(new { user.FullName, user.Email, user.Mobile, role = user.Role.ToString() }),
+            user.Id,
+            null,
+            ct);
 
         var token = _jwt.GenerateToken(user);
         return new AuthResponseDto(token, MapUser(user));
@@ -102,6 +113,15 @@ public sealed class AuthService : IAuthService
         user.LastLoginAt = DateTimeOffset.UtcNow;
         await _users.UpdateAsync(user, ct);
         await _uow.SaveChangesAsync(ct);
+        await _audit.LogAsync(
+            "LOGIN",
+            "Auth",
+            user.Id.ToString(),
+            null,
+            System.Text.Json.JsonSerializer.Serialize(new { identifier = otpIdentifier, role = user.Role.ToString(), user.LastLoginAt }),
+            user.Id,
+            null,
+            ct);
 
         var token = _jwt.GenerateToken(user);
         return new AuthResponseDto(token, MapUser(user));

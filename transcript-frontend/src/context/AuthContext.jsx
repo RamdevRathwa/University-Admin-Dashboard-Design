@@ -66,6 +66,18 @@ export const AuthProvider = ({ children }) => {
     if (rememberAuth) localStorage.setItem("rememberAuth", "true");
   };
 
+  const persistCurrentUser = (nextUser) => {
+    const { rememberAuth, token, role } = readAuthFromStorage();
+    if (!token || !role || !nextUser) return;
+    writeAuthToStorage({
+      token,
+      role,
+      userData: nextUser,
+      rememberAuth,
+    });
+    setUser(nextUser);
+  };
+
   const requestRegistrationOtp = async (identity) => {
     try {
       const response = await authService.requestRegistrationOtp(identity);
@@ -131,6 +143,15 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const refreshCurrentUser = async () => {
+    const { rememberAuth, token } = readAuthFromStorage();
+    if (!token) return null;
+    const me = await authService.me(token);
+    persistCurrentUser(me);
+    if (rememberAuth) localStorage.setItem("rememberAuth", "true");
+    return me;
+  };
+
   const value = {
     isAuthenticated,
     userRole,
@@ -140,6 +161,8 @@ export const AuthProvider = ({ children }) => {
     requestLoginOtp,
     loginWithOtp,
     completeRegistration,
+    refreshCurrentUser,
+    setCurrentUser: persistCurrentUser,
     logout,
   };
 

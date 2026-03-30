@@ -257,9 +257,50 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                 DetailRow(col, "5", "Birth Place", p?.BirthPlace ?? "");
                 DetailRow(col, "6", "Permanent Address", p?.Address ?? "");
                 DetailRow(col, "7", "Degree to be Awarded", $"{p?.Program}".Trim());
-                DetailRow(col, "8", "Joined Course in", p?.AdmissionYear.HasValue == true ? $"July {p.AdmissionYear}" : "");
-                DetailRow(col, "9", "Course Duration", "Four Years (Three Years in case of Diploma to Degree Students)");
+                DetailRow(col, "8", "Joined Course in", ResolveJoinedCourseText(p));
+                DetailRow(col, "9", "Course Duration", ResolveCourseDurationText(p));
             });
+        }
+
+        private string ResolveJoinedCourseText(StudentProfile? p)
+        {
+            if (p?.AdmissionYear.HasValue == true)
+                return $"July {p.AdmissionYear.Value}";
+
+            var firstSemester = _t.Semesters
+                .OrderBy(x => x.SemesterNumber)
+                .FirstOrDefault();
+
+            var yearSource = $"{firstSemester?.YearTitle} {firstSemester?.TermTitle}";
+            if (string.IsNullOrWhiteSpace(yearSource))
+                return string.Empty;
+
+            var match = System.Text.RegularExpressions.Regex.Match(yearSource, @"\b(19|20)\d{2}\b");
+            return match.Success ? $"July {match.Value}" : string.Empty;
+        }
+
+        private string ResolveCourseDurationText(StudentProfile? p)
+        {
+            if (p?.AdmissionYear.HasValue == true && p.GraduationYear.HasValue == true && p.GraduationYear >= p.AdmissionYear)
+            {
+                var years = p.GraduationYear.Value - p.AdmissionYear.Value;
+                if (years > 0)
+                    return years == 1 ? "1 Year" : $"{years} Years";
+            }
+
+            var semesterCount = _t.Semesters
+                .Select(x => x.SemesterNumber)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            if (semesterCount > 0)
+            {
+                var derivedYears = (int)Math.Ceiling(semesterCount / 2m);
+                if (derivedYears > 0)
+                    return derivedYears == 1 ? "1 Year" : $"{derivedYears} Years";
+            }
+
+            return string.Empty;
         }
 
         private static void DetailRow(ColumnDescriptor col, string no, string label, string value)

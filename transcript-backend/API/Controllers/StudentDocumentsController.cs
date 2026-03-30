@@ -77,8 +77,11 @@ public sealed class StudentDocumentsController : ControllerBase
             if (f.Length <= 0) continue;
             if (f.Length > 20_000_000) throw new AppException("File too large (max 20MB).", 400, "file_too_large");
 
+            var fileName = string.IsNullOrWhiteSpace(f.FileName) ? "file" : f.FileName;
+            var contentType = f.ContentType ?? "application/octet-stream";
+
             await using var s = f.OpenReadStream();
-            var rel = await _storage.SaveAsync(requestId, type, f.FileName, f.ContentType ?? "application/octet-stream", s, ct);
+            var rel = await _storage.SaveAsync(requestId, type, fileName, contentType, s, ct);
 
             docs.Add(new TranscriptDocument
             {
@@ -87,8 +90,8 @@ public sealed class StudentDocumentsController : ControllerBase
                 StudentId = _current.UserId,
                 DocumentType = type,
                 Status = TranscriptDocumentStatus.Pending,
-                FileName = f.FileName ?? "file",
-                ContentType = f.ContentType ?? "application/octet-stream",
+                FileName = fileName,
+                ContentType = contentType,
                 SizeBytes = f.Length,
                 StoragePath = rel,
                 UploadedAt = DateTimeOffset.UtcNow

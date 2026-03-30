@@ -37,6 +37,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
+builder.Services.AddTransient<RequestAuditMiddleware>();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -125,6 +126,7 @@ app.UseCors("frontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<RequestAuditMiddleware>();
 
 app.MapControllers();
 
