@@ -59,7 +59,7 @@ public sealed class ClerkVerificationController : ControllerBase
                 (x.prn != null && x.prn.Contains(term)));
         }
 
-        var list = await baseQuery.Take(200).ToListAsync(ct);
+        var list = await baseQuery.ToListAsync(ct);
 
         // Load docs for these requests
         var reqIds = list.Select(x => x.TranscriptRequestId).Distinct().ToList();
@@ -111,6 +111,8 @@ public sealed class ClerkVerificationController : ControllerBase
                 };
             })
             .Where(x => x.counts.pending > 0 || x.counts.returned > 0)
+            .OrderByDescending(x => x.createdAt)
+            .Take(200)
             .ToList();
 
         return Ok(shaped);

@@ -140,8 +140,19 @@ public sealed class TranscriptDocumentRepository : ITranscriptDocumentRepository
 
     public async Task<int> CountPendingVerificationsAsync(CancellationToken ct = default)
     {
-        return await _db.TranscriptRequestDocuments.AsNoTracking()
-            .CountAsync(x => x.StatusCode == "Pending", ct);
+        // Dashboard should show how many requests are waiting for verification,
+        // not how many individual document rows are pending.
+        return await (
+            from d in _db.TranscriptRequestDocuments.AsNoTracking()
+            join r in _db.TranscriptRequests.AsNoTracking() on d.TranscriptRequestId equals r.TranscriptRequestId
+            join s in _db.TranscriptStatuses.AsNoTracking() on r.StatusId equals s.StatusId
+            where d.StatusCode == "Pending"
+               && r.CurrentStageRoleId == (short)UserRole.Clerk
+               && (s.StatusCode == "Submitted" || s.StatusCode == "GradeEntry" || s.StatusCode == "ReturnedToClerk")
+            select d.TranscriptRequestId
+        )
+        .Distinct()
+        .CountAsync(ct);
     }
 
     private TranscriptDocument Map(Infrastructure.Persistence.V2.Entities.V2TranscriptRequestDocument row, Guid legacyRequestGuid, Guid legacyStudentGuid)

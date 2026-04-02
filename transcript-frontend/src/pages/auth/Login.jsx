@@ -103,9 +103,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4">
-      <Card className="w-full max-w-[520px]">
+      <Card className="w-full max-w-130">
         <CardHeader className="text-center">
-          <img src={universityLogo} alt="Maharaja Sayajirao University of Baroda" className="h-[70px] mx-auto mb-4 object-contain" />
+          <img src={universityLogo} alt="Maharaja Sayajirao University of Baroda" className="h-17.5 mx-auto mb-4 object-contain" />
           <CardTitle>Maharaja Sayajirao University of Baroda</CardTitle>
           <CardDescription>Online Transcript Management System</CardDescription>
         </CardHeader>

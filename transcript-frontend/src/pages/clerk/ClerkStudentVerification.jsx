@@ -137,13 +137,13 @@ export default function ClerkStudentVerification() {
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur">
                 <TableRow>
-                  <TableHead className="min-w-[260px]">Student</TableHead>
-                  <TableHead className="w-[150px]">PRN</TableHead>
-                  <TableHead className="min-w-[240px]">Program</TableHead>
-                  <TableHead className="w-[150px]">Documents</TableHead>
-                  <TableHead className="w-[190px]">Submitted</TableHead>
-                  <TableHead className="w-[130px]">Status</TableHead>
-                  <TableHead className="w-[140px] text-right">Action</TableHead>
+                  <TableHead className="min-w-65">Student</TableHead>
+                  <TableHead className="w-37.5">PRN</TableHead>
+                  <TableHead className="min-w-60">Program</TableHead>
+                  <TableHead className="w-37.5">Documents</TableHead>
+                  <TableHead className="w-47.5">Submitted</TableHead>
+                  <TableHead className="w-32.5">Status</TableHead>
+                  <TableHead className="w-35 text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
