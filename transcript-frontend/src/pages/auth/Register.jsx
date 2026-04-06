@@ -166,12 +166,12 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4">
-      <Card className="w-full max-w-155">
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4 text-gray-900">
+      <Card className="w-full max-w-155 border-gray-200 bg-white text-gray-900">
         <CardHeader className="text-center">
           <img src={universityLogo} alt="Maharaja Sayajirao University of Baroda" className="h-17.5 mx-auto mb-4 object-contain" />
-          <CardTitle>Maharaja Sayajirao University of Baroda</CardTitle>
-          <CardDescription>Online Transcript Management System</CardDescription>
+          <CardTitle className="text-gray-900">Maharaja Sayajirao University of Baroda</CardTitle>
+          <CardDescription className="text-gray-600">Online Transcript Management System</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-1">
@@ -182,7 +182,7 @@ export default function Register() {
           {stage === "identity" ? (
             <form onSubmit={startOtpVerification} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
+                <Label className="text-gray-700" htmlFor="fullName">Full Name</Label>
                 <Input
                   id="fullName"
                   value={identity.fullName}
@@ -197,7 +197,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label className="text-gray-700" htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -213,7 +213,7 @@ export default function Register() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="mobile">Mobile Number</Label>
+                <Label className="text-gray-700" htmlFor="mobile">Mobile Number</Label>
                 <Input
                   id="mobile"
                   value={identity.mobile}

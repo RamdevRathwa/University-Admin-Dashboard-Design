@@ -102,12 +102,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4">
-      <Card className="w-full max-w-130">
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center py-12 px-4 text-gray-900">
+      <Card className="w-full max-w-130 border-gray-200 bg-white text-gray-900">
         <CardHeader className="text-center">
           <img src={universityLogo} alt="Maharaja Sayajirao University of Baroda" className="h-17.5 mx-auto mb-4 object-contain" />
-          <CardTitle>Maharaja Sayajirao University of Baroda</CardTitle>
-          <CardDescription>Online Transcript Management System</CardDescription>
+          <CardTitle className="text-gray-900">Maharaja Sayajirao University of Baroda</CardTitle>
+          <CardDescription className="text-gray-600">Online Transcript Management System</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <Tabs
@@ -122,7 +122,7 @@ export default function Login() {
             <TabsContent value={method}>
               <form onSubmit={handleVerify} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="identifier">{method === "email" ? "Email" : "Mobile Number"}</Label>
+                  <Label className="text-gray-700" htmlFor="identifier">{method === "email" ? "Email" : "Mobile Number"}</Label>
                   <Input
                     id="identifier"
                     value={identifier}
@@ -190,8 +190,8 @@ export default function Login() {
             </TabsContent>
           </Tabs>
 
-          <p className="text-sm text-gray-600 text-center">
-            Don't have an account?{" "}
+            <p className="text-sm text-gray-600 text-center">
+              Don't have an account?{" "}
             <Link to="/register" className="text-[#1e40af] font-medium hover:underline">
               Register here
             </Link>
