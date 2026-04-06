@@ -4,6 +4,7 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Interfaces;
+using System.Text.Json;
 
 namespace Application.Services;
 
@@ -16,7 +17,9 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
     private readonly ITranscriptRequestRepository _requests;
     private readonly IClerkWorkflowService _workflow;
     private readonly ITranscriptDocumentRepository _documents;
+    private readonly IAdminRepository _settings;
     private readonly IUnitOfWork _uow;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public ClerkGradeEntryService(
         ICurrentUserService current,
@@ -26,6 +29,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         ITranscriptRequestRepository requests,
         IClerkWorkflowService workflow,
         ITranscriptDocumentRepository documents,
+        IAdminRepository settings,
         IUnitOfWork uow)
     {
         _current = current;
@@ -35,6 +39,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         _requests = requests;
         _workflow = workflow;
         _documents = documents;
+        _settings = settings;
         _uow = uow;
     }
 
@@ -58,6 +63,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
 
         var gradeEntries = await _grades.GetByStudentIdAsync(student.Id, ct);
         var gradeMap = gradeEntries.ToDictionary(x => x.CurriculumSubjectId, x => x);
+        var electiveSelections = await LoadElectiveSelectionsAsync(rawPrn, ct);
 
         var subjectsBySemester = subjects
             .GroupBy(x => x.SemesterNumber)
@@ -70,7 +76,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
             x => x.Key,
             x => ((x.Value.ThGrade ?? string.Empty).Trim(), (x.Value.PrGrade ?? string.Empty).Trim()));
 
-        var semesters = BuildSemesterDtos(profile.Program, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides);
+        var semesters = BuildSemesterDtos(profile.Program, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides, electiveSelections);
 
         var studentDto = new GradeEntryStudentDto(
             student.Id,
@@ -112,12 +118,14 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var gradeOverrides = gradeEntries.ToDictionary(
             x => x.CurriculumSubjectId,
             x => ((x.ThGrade ?? string.Empty).Trim(), (x.PrGrade ?? string.Empty).Trim()));
+        var electiveSelections = await LoadElectiveSelectionsAsync(rawPrn, ct);
 
         foreach (var item in dto.Items ?? Array.Empty<GradeEntryUpsertDto>())
         {
             if (item.CurriculumSubjectId == Guid.Empty) continue;
             gradeOverrides[item.CurriculumSubjectId] = ((item.ThGrade ?? string.Empty).Trim(), (item.PrGrade ?? string.Empty).Trim());
         }
+        MergeElectiveSelections(electiveSelections, dto.Electives);
 
         var subjectsBySemester = subjects
             .GroupBy(x => x.SemesterNumber)
@@ -125,7 +133,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
 
         var actualMaxSemester = subjectsBySemester.Keys.DefaultIfEmpty(0).Max();
         var expectedSemesterCount = ResolveExpectedSemesterCount(profile.Program, profile.AdmissionYear, profile.GraduationYear, actualMaxSemester);
-        var semesters = BuildSemesterDtos(profile.Program, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides);
+        var semesters = BuildSemesterDtos(profile.Program, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides, electiveSelections);
 
         var studentDto = new GradeEntryStudentDto(
             student.Id,
@@ -176,6 +184,9 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         // This enables the enforced state machine path: Submitted -> GradeEntry -> ForwardedToHoD.
         await _requests.UpdateAsync(req, ct);
 
+        var electiveSelections = await LoadElectiveSelectionsAsync(rawPrn, ct);
+        MergeElectiveSelections(electiveSelections, dto.Electives);
+
         foreach (var item in dto.Items ?? Array.Empty<GradeEntryUpsertDto>())
         {
             if (item.CurriculumSubjectId == Guid.Empty) continue;
@@ -199,6 +210,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
             await _grades.UpsertAsync(entry, ct);
         }
 
+        await SaveElectiveSelectionsAsync(rawPrn, electiveSelections, ct);
+
         await _uow.SaveChangesAsync(ct);
     }
 
@@ -207,7 +220,7 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         EnsureClerk();
 
         // Save grades first (server-side validation for missing grades happens below).
-        await SaveDraftAsync(prn, new GradeEntrySaveDraftRequestDto(dto.Items), ct);
+        await SaveDraftAsync(prn, new GradeEntrySaveDraftRequestDto(dto.Items, dto.Electives), ct);
 
         var rawPrn = (prn ?? string.Empty).Trim();
         var student = await _profiles.GetUserByPrnAsync(rawPrn, ct);
@@ -234,6 +247,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         var gradeEntries = await _grades.GetByStudentIdAsync(student.Id, ct);
         var gradeMap = gradeEntries.ToDictionary(x => x.CurriculumSubjectId, x => x);
 
+        var electiveSelections = await LoadElectiveSelectionsAsync(rawPrn, ct);
+
         foreach (var s in subjects)
         {
             gradeMap.TryGetValue(s.Id, out var ge);
@@ -242,6 +257,9 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
 
             if (GradeCalc.IsGradeMissing(th, s.ThCredits) || GradeCalc.IsGradeMissing(prg, s.PrCredits))
                 throw new AppException("Please enter grades for all subjects (TH/PR) before submitting to HoD.", 400, "grades_incomplete");
+
+            if (s.IsElective && (!electiveSelections.TryGetValue(s.Id, out var selectedValue) || string.IsNullOrWhiteSpace(selectedValue)))
+                throw new AppException("Please select all elective subjects before submitting to HoD.", 400, "electives_incomplete");
         }
 
         await _workflow.ForwardToHoDAsync(req.Id, dto.Remarks, ct);
@@ -309,7 +327,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         int? graduationYear,
         IReadOnlyDictionary<int, List<CurriculumSubject>> subjectsBySemester,
         int expectedSemesterCount,
-        IReadOnlyDictionary<Guid, (string ThGrade, string PrGrade)> gradeMap)
+        IReadOnlyDictionary<Guid, (string ThGrade, string PrGrade)> gradeMap,
+        IReadOnlyDictionary<Guid, string> electiveSelections)
     {
         var cumulative = new RunningTotals();
         var semesters = new List<GradeEntrySemesterDto>();
@@ -342,6 +361,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
                     s.Id,
                     (s.SubjectCode ?? string.Empty).Trim(),
                     s.SubjectName,
+                    s.IsElective,
+                    electiveSelections.GetValueOrDefault(s.Id),
                     s.ThHours,
                     s.PrHours,
                     s.ThCredits,
@@ -414,6 +435,54 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
         }
 
         return semesters;
+    }
+
+    private async Task<Dictionary<Guid, string>> LoadElectiveSelectionsAsync(string prn, CancellationToken ct)
+    {
+        var setting = await _settings.GetSettingAsync(GetElectiveSettingKey(prn), ct);
+        if (setting is null || string.IsNullOrWhiteSpace(setting.SettingValue))
+            return new Dictionary<Guid, string>();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<Guid, string>>(setting.SettingValue, JsonOptions);
+            return parsed?.Where(x => x.Key != Guid.Empty && !string.IsNullOrWhiteSpace(x.Value))
+                .ToDictionary(x => x.Key, x => x.Value.Trim()) ?? new Dictionary<Guid, string>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<Guid, string>();
+        }
+    }
+
+    private async Task SaveElectiveSelectionsAsync(string prn, IReadOnlyDictionary<Guid, string> selections, CancellationToken ct)
+    {
+        await _settings.UpsertSettingAsync(new SystemSetting
+        {
+            SettingKey = GetElectiveSettingKey(prn),
+            SettingValue = JsonSerializer.Serialize(selections, JsonOptions),
+            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedBy = _current.UserId
+        }, ct);
+    }
+
+    private static string GetElectiveSettingKey(string prn) => $"grade_entry_electives:{prn.Trim().ToUpperInvariant()}";
+
+    private static void MergeElectiveSelections(IDictionary<Guid, string> destination, IReadOnlyList<GradeEntryElectiveSelectionDto>? incoming)
+    {
+        foreach (var item in incoming ?? Array.Empty<GradeEntryElectiveSelectionDto>())
+        {
+            if (item.CurriculumSubjectId == Guid.Empty) continue;
+
+            var value = (item.SelectedValue ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                destination.Remove(item.CurriculumSubjectId);
+                continue;
+            }
+
+            destination[item.CurriculumSubjectId] = value;
+        }
     }
 
     private sealed class RunningTotals

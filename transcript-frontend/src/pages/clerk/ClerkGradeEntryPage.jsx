@@ -113,13 +113,14 @@ export default function ClerkGradeEntryPage() {
           curriculumSubjectId: sub.curriculumSubjectId || sub.CurriculumSubjectId,
           code: sub.subjectCode || sub.SubjectCode || "",
           name: sub.subjectName || sub.SubjectName || "",
+          isElective: sub.isElective ?? sub.IsElective ?? false,
+          selectedElectiveValue: sub.selectedElectiveValue || sub.SelectedElectiveValue || "",
           thHours: sub.thHours || sub.ThHours || 0,
           prHours: sub.prHours || sub.PrHours || 0,
           thCredits: sub.thCredits || sub.ThCredits || 0,
           prCredits: sub.prCredits || sub.PrCredits || 0,
           thGrade: sub.thGrade || sub.ThGrade || "",
           prGrade: sub.prGrade || sub.PrGrade || "",
-          isElective: sub.isElective ?? sub.IsElective ?? false,
           thGradePoint: sub.thGradePoint ?? sub.ThGradePoint ?? 0,
           prGradePoint: sub.prGradePoint ?? sub.PrGradePoint ?? 0,
           thEarnedGradePoints: sub.thEarnedGradePoints ?? sub.ThEarnedGradePoints ?? 0,
@@ -146,22 +147,15 @@ export default function ClerkGradeEntryPage() {
         courseDuration: formatCourseDuration(admissionYear, graduationYear, mappedSemesters),
       };
 
-      let savedElectives = {};
-      try {
-        savedElectives = JSON.parse(window.localStorage.getItem(`clerk-elective-selections:${mappedStudent.prn}`) || "{}");
-      } catch {
-        savedElectives = {};
-      }
-
       const nextElectives = {};
       mappedSemesters.forEach((sem) => {
         (sem.subjects || []).forEach((sub) => {
           const subjectId = sub.curriculumSubjectId;
           if (!subjectId) return;
           const options = getElectiveOptions(mappedStudent.program, sub);
-          const saved = savedElectives?.[subjectId];
-          if (saved && options.some((option) => option.value === saved)) {
-            nextElectives[subjectId] = saved;
+          const selected = sub.selectedElectiveValue;
+          if (selected && options.some((option) => option.value === selected)) {
+            nextElectives[subjectId] = selected;
           }
         });
       });
@@ -208,15 +202,6 @@ export default function ClerkGradeEntryPage() {
     setElectiveSelections((prev) => ({ ...prev, [subjectId]: value }));
     if (errors) setErrors("");
   };
-
-  useEffect(() => {
-    if (!student?.prn) return;
-    try {
-      window.localStorage.setItem(`clerk-elective-selections:${student.prn}`, JSON.stringify(electiveSelections || {}));
-    } catch {
-      // ignore storage issues
-    }
-  }, [student?.prn, electiveSelections]);
 
   const incompleteCount = useMemo(() => {
     const sems = Array.isArray(semesters) ? semesters : [];
@@ -269,12 +254,20 @@ export default function ClerkGradeEntryPage() {
     return items;
   };
 
+  const buildElectivesPayload = () =>
+    Object.entries(electiveSelections || {})
+      .filter(([curriculumSubjectId, selectedValue]) => curriculumSubjectId && selectedValue)
+      .map(([curriculumSubjectId, selectedValue]) => ({
+        curriculumSubjectId,
+        selectedValue,
+      }));
+
   useEffect(() => {
     if (!student?.prn || semesters.length === 0) return;
 
     const handle = window.setTimeout(async () => {
       try {
-        const preview = await clerkGradeEntryService.preview(student.prn, buildItemsPayload());
+        const preview = await clerkGradeEntryService.preview(student.prn, buildItemsPayload(), buildElectivesPayload());
         const sems = preview?.semesters || preview?.Semesters || [];
         const mappedPreviewSemesters = (sems || []).map((sem) => ({
           yearTitle: sem.yearTitle || sem.YearTitle || "",
@@ -286,13 +279,14 @@ export default function ClerkGradeEntryPage() {
             curriculumSubjectId: sub.curriculumSubjectId || sub.CurriculumSubjectId,
             code: sub.subjectCode || sub.SubjectCode || "",
             name: sub.subjectName || sub.SubjectName || "",
+            isElective: sub.isElective ?? sub.IsElective ?? false,
+            selectedElectiveValue: sub.selectedElectiveValue || sub.SelectedElectiveValue || "",
             thHours: sub.thHours || sub.ThHours || 0,
             prHours: sub.prHours || sub.PrHours || 0,
             thCredits: sub.thCredits || sub.ThCredits || 0,
             prCredits: sub.prCredits || sub.PrCredits || 0,
             thGrade: sub.thGrade || sub.ThGrade || "",
             prGrade: sub.prGrade || sub.PrGrade || "",
-            isElective: sub.isElective ?? sub.IsElective ?? false,
             thGradePoint: sub.thGradePoint ?? sub.ThGradePoint ?? 0,
             prGradePoint: sub.prGradePoint ?? sub.PrGradePoint ?? 0,
             thEarnedGradePoints: sub.thEarnedGradePoints ?? sub.ThEarnedGradePoints ?? 0,
@@ -308,7 +302,7 @@ export default function ClerkGradeEntryPage() {
     }, 250);
 
     return () => window.clearTimeout(handle);
-  }, [grades, student?.prn]);
+  }, [grades, electiveSelections, student?.prn]);
 
   const saveDraft = async () => {
     if (!student) {
@@ -319,7 +313,7 @@ export default function ClerkGradeEntryPage() {
     setInfo("");
     setSubmitting(true);
     try {
-      await clerkGradeEntryService.saveDraft(student.prn, buildItemsPayload());
+      await clerkGradeEntryService.saveDraft(student.prn, buildItemsPayload(), buildElectivesPayload());
       setInfo("Draft saved.");
     } catch (e) {
       setErrors(e?.message || "Failed to save draft.");
@@ -436,7 +430,7 @@ export default function ClerkGradeEntryPage() {
     setInfo("");
     setSubmitting(true);
     try {
-      await clerkGradeEntryService.submitToHod(student.prn, buildItemsPayload(), remarks);
+      await clerkGradeEntryService.submitToHod(student.prn, buildItemsPayload(), remarks, buildElectivesPayload());
       setInfo("Submitted to HoD.");
     } catch (e) {
       setErrors(e?.message || "Failed to submit to HoD.");

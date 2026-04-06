@@ -35,6 +35,7 @@ export default function ClerkSettings() {
   const { user, setCurrentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const [profile, setProfile] = useState({ fullName: "", email: "", mobile: "" });
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifPush, setNotifPush] = useState(true);
@@ -54,6 +55,16 @@ export default function ClerkSettings() {
       } catch (e) {
         if (!alive) return;
         toast({ title: "Failed to load profile", description: e?.message || "Unable to load account profile.", variant: "destructive" });
+      }
+
+      try {
+        const prefs = await accountService.getPreferences();
+        if (!alive) return;
+        setNotifEmail(Boolean(prefs?.emailNotifications ?? true));
+        setNotifPush(Boolean(prefs?.inAppAlerts ?? true));
+        setNotifApprovals(Boolean(prefs?.approvalUpdates ?? true));
+      } catch {
+        if (!alive) return;
       } finally {
         if (alive) setLoading(false);
       }
@@ -78,6 +89,26 @@ export default function ClerkSettings() {
       toast({ title: "Save failed", description: e?.message || "Unable to update profile.", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const savePreferences = async () => {
+    setSavingPreferences(true);
+    try {
+      await accountService.updatePreferences({
+        emailNotifications: notifEmail,
+        inAppAlerts: notifPush,
+        approvalUpdates: notifApprovals,
+        queueUpdates: true,
+        returnedCases: true,
+        finalApprovalQueue: true,
+        publishFollowUp: true,
+      });
+      toast({ title: "Preferences updated", description: "Notification preferences are now saved to your account." });
+    } catch (e) {
+      toast({ title: "Save failed", description: e?.message || "Unable to update preferences.", variant: "destructive" });
+    } finally {
+      setSavingPreferences(false);
     }
   };
 
@@ -152,28 +183,36 @@ export default function ClerkSettings() {
         <CardHeader className="pb-4">
           <CardTitle className="text-base">Notification Preferences</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <PreferenceRow
-            icon={Bell}
-            title="Email Notifications"
-            description="Receive request and verification updates by email."
-            checked={notifEmail}
-            onCheckedChange={setNotifEmail}
-          />
-          <PreferenceRow
-            icon={UserCog}
-            title="In-app Alerts"
-            description="Keep action reminders visible inside the clerk panel."
-            checked={notifPush}
-            onCheckedChange={setNotifPush}
-          />
-          <PreferenceRow
-            icon={Bell}
-            title="Approval Updates"
-            description="See when HoD or Dean sends a request back for changes."
-            checked={notifApprovals}
-            onCheckedChange={setNotifApprovals}
-          />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <PreferenceRow
+              icon={Bell}
+              title="Email Notifications"
+              description="Receive request and verification updates by email."
+              checked={notifEmail}
+              onCheckedChange={setNotifEmail}
+            />
+            <PreferenceRow
+              icon={UserCog}
+              title="In-app Alerts"
+              description="Keep action reminders visible inside the clerk panel."
+              checked={notifPush}
+              onCheckedChange={setNotifPush}
+            />
+            <PreferenceRow
+              icon={Bell}
+              title="Approval Updates"
+              description="See when HoD or Dean sends a request back for changes."
+              checked={notifApprovals}
+              onCheckedChange={setNotifApprovals}
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={savePreferences} disabled={loading || savingPreferences}>
+              <Save className="h-4 w-4" />
+              {savingPreferences ? "Saving..." : "Save Preferences"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

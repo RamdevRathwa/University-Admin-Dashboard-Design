@@ -53,6 +53,7 @@ import UserManagement from "../pages/admin/UserManagement";
 import RoleManagement from "../pages/admin/RoleManagement";
 import FacultyManagement from "../pages/admin/FacultyManagement";
 import ProgramCurriculum from "../pages/admin/ProgramCurriculum";
+import CurriculumSubjectsPage from "../pages/admin/CurriculumSubjectsPage";
 import GradingScheme from "../pages/admin/GradingScheme";
 import TranscriptRecords from "../pages/admin/TranscriptRecords";
 import PaymentsPage from "../pages/admin/PaymentsPage";
@@ -192,6 +193,7 @@ export default function AppRoutes() {
           <Route path="roles" element={<RoleManagement />} />
           <Route path="faculty" element={<FacultyManagement />} />
           <Route path="curriculum" element={<ProgramCurriculum />} />
+          <Route path="curriculum/:versionId/subjects" element={<CurriculumSubjectsPage />} />
           <Route path="grading" element={<GradingScheme />} />
           <Route path="transcripts" element={<TranscriptRecords />} />
           <Route path="payments" element={<PaymentsPage />} />

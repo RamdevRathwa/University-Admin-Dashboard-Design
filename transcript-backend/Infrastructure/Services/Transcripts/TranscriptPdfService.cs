@@ -126,8 +126,8 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         {
             c.Border(1).Padding(8).Row(r =>
             {
-                r.ConstantColumn(110).AlignMiddle().Element(LogoLeft);
-                r.RelativeColumn().AlignMiddle().Column(col =>
+                r.ConstantItem(110).AlignMiddle().Element(LogoLeft);
+                r.RelativeItem().AlignMiddle().Column(col =>
                 {
                     col.Item().AlignCenter().Text("Faculty of Technology & Engineering").SemiBold().FontSize(14);
                     col.Item().AlignCenter().Text("THE MAHARAJA SAYAJIRAO UNIVERSITY OF BARODA").SemiBold().FontSize(11);
@@ -137,7 +137,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                     col.Item().AlignCenter().Text("E-mail: dean-tech@msubaroda.ac.in  &  deantech@yahoo.in").FontSize(9);
                     col.Item().AlignCenter().Text("ACCREDITED GRADE “A+” BY NAAC").SemiBold().FontSize(10);
                 });
-                r.ConstantColumn(110).AlignMiddle().Element(LogoRight);
+                r.ConstantItem(110).AlignMiddle().Element(LogoRight);
             });
         }
 
@@ -190,8 +190,8 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         {
             c.PaddingTop(6).Row(r =>
             {
-                r.RelativeColumn().AlignLeft().Text($"Verification Code: {_verificationCode}").FontSize(9);
-                r.RelativeColumn().AlignCenter().Text(x =>
+                r.RelativeItem().AlignLeft().Text($"Verification Code: {_verificationCode}").FontSize(9);
+                r.RelativeItem().AlignCenter().Text(x =>
                 {
                     x.DefaultTextStyle(s => s.FontSize(9));
                     x.Span("PAGE ");
@@ -199,7 +199,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                     x.Span(" OF ");
                     x.TotalPages();
                 });
-                r.RelativeColumn().AlignRight().Text("");
+                r.RelativeItem().AlignRight().Text("");
             });
         }
 
@@ -214,8 +214,8 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
 
                 col.Item().Row(r =>
                 {
-                    r.RelativeColumn().Text("TRANSCRIPT OF THE ACADEMIC RECORD").SemiBold();
-                    r.ConstantColumn(160).AlignRight().Text($"Date : {DateTime.Now:dd.MM.yyyy}").SemiBold();
+                    r.RelativeItem().Text("TRANSCRIPT OF THE ACADEMIC RECORD").SemiBold();
+                    r.ConstantItem(160).AlignRight().Text($"Date : {DateTime.Now:dd.MM.yyyy}").SemiBold();
                 });
 
                 col.Item().Text(txt =>
@@ -307,9 +307,9 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         {
             col.Item().Row(r =>
             {
-                r.ConstantColumn(18).Text(no).FontSize(9.5f);
-                r.ConstantColumn(175).Text($"{label} :").FontSize(9.5f);
-                r.RelativeColumn().Text(value).FontSize(9.5f);
+                r.ConstantItem(18).Text(no).FontSize(9.5f);
+                r.ConstantItem(175).Text($"{label} :").FontSize(9.5f);
+                r.RelativeItem().Text(value).FontSize(9.5f);
             });
         }
 
@@ -497,9 +497,9 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
 
                 col.Item().PaddingTop(24).Row(r =>
                 {
-                    r.RelativeColumn().Text("PREPARED BY:").FontSize(10);
-                    r.RelativeColumn().AlignCenter().Text("DEAN").SemiBold().FontSize(11);
-                    r.RelativeColumn().Text("CHECKED BY:").FontSize(10);
+                    r.RelativeItem().Text("PREPARED BY:").FontSize(10);
+                    r.RelativeItem().AlignCenter().Text("DEAN").SemiBold().FontSize(11);
+                    r.RelativeItem().Text("CHECKED BY:").FontSize(10);
                 });
             });
         }

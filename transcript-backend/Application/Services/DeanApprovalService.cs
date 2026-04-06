@@ -7,6 +7,7 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Interfaces;
+using System.Text.Json;
 
 namespace Application.Services;
 
@@ -21,7 +22,9 @@ public sealed class DeanApprovalService : IDeanApprovalService
     private readonly ITranscriptApprovalRepository _approvals;
     private readonly ITranscriptRepository _transcripts;
     private readonly ITranscriptPdfService _pdf;
+    private readonly IAdminRepository _settings;
     private readonly IUnitOfWork _uow;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public DeanApprovalService(
         ICurrentUserService current,
@@ -33,6 +36,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
         ITranscriptApprovalRepository approvals,
         ITranscriptRepository transcripts,
         ITranscriptPdfService pdf,
+        IAdminRepository settings,
         IUnitOfWork uow)
     {
         _current = current;
@@ -44,6 +48,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
         _approvals = approvals;
         _transcripts = transcripts;
         _pdf = pdf;
+        _settings = settings;
         _uow = uow;
     }
 
@@ -335,8 +340,9 @@ public sealed class DeanApprovalService : IDeanApprovalService
         var gradeOverrides = gradeMap.ToDictionary(
             x => x.Key,
             x => ((x.Value.ThGrade ?? string.Empty).Trim(), (x.Value.PrGrade ?? string.Empty).Trim()));
+        var electiveSelections = await LoadElectiveSelectionsAsync(profile.PRN, ct);
 
-        var semesters = BuildSemesterDtos(profile.Program ?? string.Empty, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides);
+        var semesters = BuildSemesterDtos(profile.Program ?? string.Empty, profile.AdmissionYear, profile.GraduationYear, subjectsBySemester, expectedSemesterCount, gradeOverrides, electiveSelections);
 
         var studentDto = new GradeEntryStudentDto(
             student.Id,
@@ -344,7 +350,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
             profile.PRN,
             profile.Faculty,
             profile.Department,
-            profile.Program,
+            profile.Program ?? string.Empty,
             profile.AdmissionYear,
             profile.GraduationYear,
             profile.Nationality,
@@ -430,7 +436,8 @@ public sealed class DeanApprovalService : IDeanApprovalService
         int? graduationYear,
         IReadOnlyDictionary<int, List<CurriculumSubject>> subjectsBySemester,
         int expectedSemesterCount,
-        IReadOnlyDictionary<Guid, (string ThGrade, string PrGrade)> gradeMap)
+        IReadOnlyDictionary<Guid, (string ThGrade, string PrGrade)> gradeMap,
+        IReadOnlyDictionary<Guid, string> electiveSelections)
     {
         var cumulative = new RunningTotals();
         var semesters = new List<GradeEntrySemesterDto>();
@@ -463,6 +470,8 @@ public sealed class DeanApprovalService : IDeanApprovalService
                     s.Id,
                     (s.SubjectCode ?? string.Empty).Trim(),
                     s.SubjectName,
+                    s.IsElective,
+                    electiveSelections.GetValueOrDefault(s.Id),
                     s.ThHours,
                     s.PrHours,
                     s.ThCredits,
@@ -535,6 +544,25 @@ public sealed class DeanApprovalService : IDeanApprovalService
         }
 
         return semesters;
+    }
+
+    private async Task<Dictionary<Guid, string>> LoadElectiveSelectionsAsync(string? prn, CancellationToken ct)
+    {
+        var normalizedPrn = (prn ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedPrn)) return new Dictionary<Guid, string>();
+
+        var setting = await _settings.GetSettingAsync($"grade_entry_electives:{normalizedPrn.ToUpperInvariant()}", ct);
+        if (setting is null || string.IsNullOrWhiteSpace(setting.SettingValue))
+            return new Dictionary<Guid, string>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<Guid, string>>(setting.SettingValue, JsonOptions) ?? new Dictionary<Guid, string>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<Guid, string>();
+        }
     }
 
     private sealed class RunningTotals

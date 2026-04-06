@@ -38,6 +38,12 @@ public interface IAdminRepository
 
     Task<IReadOnlyList<CurriculumVersion>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default);
     Task AddCurriculumVersionAsync(CurriculumVersion version, CancellationToken ct = default);
+    Task<bool> IsCurriculumVersionUsedAsync(Guid versionId, CancellationToken ct = default);
+    Task<IReadOnlyList<CurriculumSubject>> ListCurriculumSubjectsAsync(Guid versionId, CancellationToken ct = default);
+    Task<Domain.Entities.Program?> GetProgramByCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
+    Task<Guid?> GetCurriculumVersionIdBySubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default);
+    Task UpsertCurriculumSubjectAsync(Guid? curriculumSubjectId, Guid versionId, CurriculumSubject subject, CancellationToken ct = default);
+    Task SoftDeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default);
 
     Task<IReadOnlyList<GradingScheme>> ListGradingSchemesAsync(CancellationToken ct = default);
     Task AddGradingSchemeAsync(GradingScheme scheme, CancellationToken ct = default);
@@ -45,4 +51,3 @@ public interface IAdminRepository
     Task<PagedResultDto<AdminTranscriptItemDto>> ListTranscriptsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default);
     Task<Transcript?> GetTranscriptForUpdateAsync(Guid id, CancellationToken ct = default);
 }
-

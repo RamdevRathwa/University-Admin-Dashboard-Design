@@ -35,6 +35,7 @@ export default function DeanSettings() {
   const { user, setCurrentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const [profile, setProfile] = useState({ fullName: "", email: "", mobile: "" });
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifFinalQueue, setNotifFinalQueue] = useState(true);
@@ -54,6 +55,16 @@ export default function DeanSettings() {
       } catch (e) {
         if (!alive) return;
         toast({ title: "Failed to load profile", description: e?.message || "Unable to load Dean profile.", variant: "destructive" });
+      }
+
+      try {
+        const prefs = await accountService.getPreferences();
+        if (!alive) return;
+        setNotifEmail(Boolean(prefs?.emailNotifications ?? true));
+        setNotifFinalQueue(Boolean(prefs?.finalApprovalQueue ?? true));
+        setNotifPublished(Boolean(prefs?.publishFollowUp ?? true));
+      } catch {
+        if (!alive) return;
       } finally {
         if (alive) setLoading(false);
       }
@@ -78,6 +89,26 @@ export default function DeanSettings() {
       toast({ title: "Save failed", description: e?.message || "Unable to update profile.", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const savePreferences = async () => {
+    setSavingPreferences(true);
+    try {
+      await accountService.updatePreferences({
+        emailNotifications: notifEmail,
+        inAppAlerts: true,
+        approvalUpdates: true,
+        queueUpdates: true,
+        returnedCases: true,
+        finalApprovalQueue: notifFinalQueue,
+        publishFollowUp: notifPublished,
+      });
+      toast({ title: "Preferences updated", description: "Dean notifications are now saved to your account." });
+    } catch (e) {
+      toast({ title: "Save failed", description: e?.message || "Unable to update preferences.", variant: "destructive" });
+    } finally {
+      setSavingPreferences(false);
     }
   };
 
@@ -147,10 +178,18 @@ export default function DeanSettings() {
         <CardHeader className="pb-4">
           <CardTitle className="text-base">Notification Preferences</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <PreferenceRow icon={Bell} title="Email Notifications" description="Receive final approval alerts by email." checked={notifEmail} onCheckedChange={setNotifEmail} />
-          <PreferenceRow icon={UserCog} title="Final Approval Queue" description="Stay informed about new HoD-approved transcript requests." checked={notifFinalQueue} onCheckedChange={setNotifFinalQueue} />
-          <PreferenceRow icon={Bell} title="Publish Follow-up" description="Get updates when approved transcripts are published by Admin." checked={notifPublished} onCheckedChange={setNotifPublished} />
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <PreferenceRow icon={Bell} title="Email Notifications" description="Receive final approval alerts by email." checked={notifEmail} onCheckedChange={setNotifEmail} />
+            <PreferenceRow icon={UserCog} title="Final Approval Queue" description="Stay informed about new HoD-approved transcript requests." checked={notifFinalQueue} onCheckedChange={setNotifFinalQueue} />
+            <PreferenceRow icon={Bell} title="Publish Follow-up" description="Get updates when approved transcripts are published by Admin." checked={notifPublished} onCheckedChange={setNotifPublished} />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={savePreferences} disabled={loading || savingPreferences}>
+              <Save className="h-4 w-4" />
+              {savingPreferences ? "Saving..." : "Save Preferences"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

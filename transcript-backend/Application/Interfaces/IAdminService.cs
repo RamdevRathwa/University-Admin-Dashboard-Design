@@ -26,6 +26,9 @@ public interface IAdminService
     Task UpsertProgramAsync(object body, CancellationToken ct = default);
     Task<IReadOnlyList<object>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default);
     Task CreateCurriculumVersionAsync(Guid? programId, object body, CancellationToken ct = default);
+    Task<IReadOnlyList<object>> ListCurriculumSubjectsAsync(Guid? versionId, CancellationToken ct = default);
+    Task UpsertCurriculumSubjectAsync(Guid? versionId, Guid? curriculumSubjectId, object body, CancellationToken ct = default);
+    Task DeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default);
 
     Task<IReadOnlyList<object>> ListGradingSchemesAsync(CancellationToken ct = default);
     Task UpsertGradingSchemeAsync(object body, CancellationToken ct = default);
@@ -39,4 +42,3 @@ public interface IAdminService
     Task<object> GetSystemSettingsAsync(CancellationToken ct = default);
     Task UpdateSystemSettingsAsync(object body, CancellationToken ct = default);
 }
-

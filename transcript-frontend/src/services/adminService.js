@@ -21,7 +21,8 @@ export const adminService = {
     apiRequest(`/api/admin/roles/${encodeURIComponent(roleId)}/permissions`, { method: "PUT", body }),
 
   listFaculties: async () => apiRequest("/api/admin/faculties"),
-  listDepartments: async (facultyId) => apiRequest(`/api/admin/departments?facultyId=${encodeURIComponent(facultyId || "")}`),
+  listDepartments: async (facultyId) =>
+    apiRequest(facultyId ? `/api/admin/departments?facultyId=${encodeURIComponent(facultyId)}` : "/api/admin/departments"),
   upsertFaculty: async (body) => apiRequest("/api/admin/faculties", { method: "POST", body }),
   upsertDepartment: async (body) => apiRequest("/api/admin/departments", { method: "POST", body }),
 
@@ -31,6 +32,14 @@ export const adminService = {
   upsertProgram: async (body) => apiRequest("/api/admin/programs", { method: "POST", body }),
   createCurriculumVersion: async (programId, body) =>
     apiRequest(`/api/admin/curriculum/versions?programId=${encodeURIComponent(programId || "")}`, { method: "POST", body }),
+  listCurriculumSubjects: async (versionId) =>
+    apiRequest(`/api/admin/curriculum/subjects?versionId=${encodeURIComponent(versionId || "")}`),
+  createCurriculumSubject: async (versionId, body) =>
+    apiRequest(`/api/admin/curriculum/subjects?versionId=${encodeURIComponent(versionId || "")}`, { method: "POST", body }),
+  updateCurriculumSubject: async (id, versionId, body) =>
+    apiRequest(`/api/admin/curriculum/subjects/${encodeURIComponent(id)}?versionId=${encodeURIComponent(versionId || "")}`, { method: "PUT", body }),
+  deleteCurriculumSubject: async (id) =>
+    apiRequest(`/api/admin/curriculum/subjects/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   listGradingSchemes: async () => apiRequest("/api/admin/grading/schemes"),
   upsertGradingScheme: async (body) => apiRequest("/api/admin/grading/schemes", { method: "POST", body }),

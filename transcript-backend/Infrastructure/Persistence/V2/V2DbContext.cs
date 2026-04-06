@@ -27,6 +27,7 @@ public sealed class V2DbContext : DbContext
     public DbSet<V2Faculty> Faculties => Set<V2Faculty>();
     public DbSet<V2Department> Departments => Set<V2Department>();
     public DbSet<V2Program> Programs => Set<V2Program>();
+    public DbSet<V2GradingScheme> GradingSchemes => Set<V2GradingScheme>();
     public DbSet<V2AcademicYear> AcademicYears => Set<V2AcademicYear>();
 
     public DbSet<V2CurriculumVersion> CurriculumVersions => Set<V2CurriculumVersion>();
@@ -91,6 +92,11 @@ public sealed class V2DbContext : DbContext
         modelBuilder.Entity<V2Faculty>().ToTable("faculties").HasKey(x => x.FacultyId);
         modelBuilder.Entity<V2Department>().ToTable("departments").HasKey(x => x.DepartmentId);
         modelBuilder.Entity<V2Program>().ToTable("programs").HasKey(x => x.ProgramId);
+        modelBuilder.Entity<V2GradingScheme>(b =>
+        {
+            b.ToTable("grading_schemes").HasKey(x => x.GradingSchemeId);
+            b.Property(x => x.MaxGradePoint).HasPrecision(5, 2);
+        });
         modelBuilder.Entity<V2AcademicYear>().ToTable("academic_years").HasKey(x => x.AcademicYearId);
 
         modelBuilder.Entity<V2CurriculumVersion>().ToTable("curriculum_versions").HasKey(x => x.CurriculumVersionId);

@@ -29,7 +29,8 @@ public static class GradeCalc
     public static bool IsGradeMissing(string grade, decimal credits)
     {
         if (credits <= 0) return false;
-        return string.IsNullOrWhiteSpace((grade ?? string.Empty).Trim()) || (grade.Trim() == "-") || (grade.Trim() == "--");
+        var normalized = (grade ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(normalized) || normalized == "-" || normalized == "--";
     }
 
     public static string GradeFromGp(decimal gp)
@@ -68,4 +69,3 @@ public static class GradeCalc
             throw new AppException("Transcript is locked after Dean approval.", 400, "transcript_locked");
     }
 }
-

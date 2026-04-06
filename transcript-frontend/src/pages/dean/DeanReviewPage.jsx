@@ -143,6 +143,7 @@ export default function DeanReviewPage() {
               <SemesterTranscriptTable
                 key={idx}
                 semIndex={idx}
+                program={student?.program}
                 yearTitle={sem.yearTitle}
                 termTitle={sem.termTitle}
                 creditPointScheme={sem.creditPointScheme}
@@ -254,4 +255,3 @@ function Info({ label, value, mono }) {
     </div>
   );
 }
-

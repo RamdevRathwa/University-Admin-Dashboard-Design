@@ -136,6 +136,7 @@ export default function HodReviewPage() {
               <SemesterTranscriptTable
                 key={idx}
                 semIndex={idx}
+                program={student?.program}
                 yearTitle={sem.yearTitle}
                 termTitle={sem.termTitle}
                 creditPointScheme={sem.creditPointScheme}

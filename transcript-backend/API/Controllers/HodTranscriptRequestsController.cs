@@ -73,6 +73,68 @@ public sealed class HodTranscriptRequestsController : ControllerBase
         return Ok(shaped);
     }
 
+    [HttpGet("approved")]
+    public async Task<IActionResult> Approved(CancellationToken ct)
+    {
+        var rows = await (
+            from a in _db.TranscriptApprovals.AsNoTracking()
+            join r in _db.TranscriptRequests.AsNoTracking() on a.TranscriptRequestId equals r.TranscriptRequestId
+            join mr in _db.MapRequests.AsNoTracking() on r.TranscriptRequestId equals mr.TranscriptRequestId
+            join s in _db.Students.AsNoTracking() on r.StudentId equals s.StudentId
+            join u in _db.Users.AsNoTracking() on s.UserId equals u.UserId
+            join p in _db.Programs.AsNoTracking() on s.ProgramId equals p.ProgramId into pj
+            from p in pj.DefaultIfEmpty()
+            join d in _db.Departments.AsNoTracking() on p.DepartmentId equals d.DepartmentId into dj
+            from d in dj.DefaultIfEmpty()
+            where a.RoleId == (short)UserRole.HoD && a.ActionCode == "Forward"
+            orderby a.ActedAt descending
+            select new
+            {
+                id = mr.LegacyRequestGuid,
+                studentName = u.FullName,
+                prn = s.Prn,
+                program = p != null ? p.ProgramCode : null,
+                department = d != null ? d.DeptName : null,
+                decisionAt = a.ActedAt,
+                remarks = a.Remarks,
+                status = "Forwarded to Dean"
+            }
+        ).Take(500).ToListAsync(ct);
+
+        return Ok(rows);
+    }
+
+    [HttpGet("rejected")]
+    public async Task<IActionResult> Rejected(CancellationToken ct)
+    {
+        var rows = await (
+            from a in _db.TranscriptApprovals.AsNoTracking()
+            join r in _db.TranscriptRequests.AsNoTracking() on a.TranscriptRequestId equals r.TranscriptRequestId
+            join mr in _db.MapRequests.AsNoTracking() on r.TranscriptRequestId equals mr.TranscriptRequestId
+            join s in _db.Students.AsNoTracking() on r.StudentId equals s.StudentId
+            join u in _db.Users.AsNoTracking() on s.UserId equals u.UserId
+            join p in _db.Programs.AsNoTracking() on s.ProgramId equals p.ProgramId into pj
+            from p in pj.DefaultIfEmpty()
+            join d in _db.Departments.AsNoTracking() on p.DepartmentId equals d.DepartmentId into dj
+            from d in dj.DefaultIfEmpty()
+            where a.RoleId == (short)UserRole.HoD && (a.ActionCode == "Return" || a.ActionCode == "Reject")
+            orderby a.ActedAt descending
+            select new
+            {
+                id = mr.LegacyRequestGuid,
+                studentName = u.FullName,
+                prn = s.Prn,
+                program = p != null ? p.ProgramCode : null,
+                department = d != null ? d.DeptName : null,
+                decisionAt = a.ActedAt,
+                remarks = a.Remarks,
+                status = a.ActionCode == "Reject" ? "Rejected by HoD" : "Returned to Clerk"
+            }
+        ).Take(500).ToListAsync(ct);
+
+        return Ok(rows);
+    }
+
     [HttpGet("{id:guid}/review")]
     public async Task<IActionResult> Review([FromRoute] Guid id, CancellationToken ct)
     {

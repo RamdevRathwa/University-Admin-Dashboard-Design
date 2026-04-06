@@ -3,6 +3,7 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence.V2;
+using Infrastructure.Persistence.V2.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
@@ -432,8 +433,49 @@ public sealed class AdminRepository : IAdminRepository
         }).ToList();
     }
 
-    public Task<Faculty?> GetFacultyAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Faculty?>(null);
-    public Task UpsertFacultyAsync(Faculty faculty, CancellationToken ct = default) => Task.CompletedTask;
+    public async Task<Faculty?> GetFacultyAsync(Guid id, CancellationToken ct = default)
+    {
+        var fid = DecodeInt32Guid(id);
+        if (!fid.HasValue) return null;
+
+        var row = await _db.Faculties.AsNoTracking().FirstOrDefaultAsync(x => x.FacultyId == fid.Value, ct);
+        if (row is null) return null;
+
+        return new Faculty
+        {
+            Id = EncodeInt32Guid(0xC1, row.FacultyId),
+            Code = row.FacultyCode,
+            Name = row.FacultyName,
+            IsActive = row.IsActive,
+            CreatedAt = row.CreatedAt
+        };
+    }
+
+    public async Task UpsertFacultyAsync(Faculty faculty, CancellationToken ct = default)
+    {
+        var fid = DecodeInt32Guid(faculty.Id);
+        V2Faculty? row = null;
+        if (fid.HasValue)
+            row = await _db.Faculties.FirstOrDefaultAsync(x => x.FacultyId == fid.Value, ct);
+
+        if (row is null)
+        {
+            row = new V2Faculty
+            {
+                FacultyCode = faculty.Code.Trim(),
+                FacultyName = faculty.Name.Trim(),
+                IsActive = faculty.IsActive,
+                CreatedAt = faculty.CreatedAt == default ? DateTimeOffset.UtcNow : faculty.CreatedAt
+            };
+            _db.Faculties.Add(row);
+        }
+        else
+        {
+            row.FacultyCode = faculty.Code.Trim();
+            row.FacultyName = faculty.Name.Trim();
+            row.IsActive = faculty.IsActive;
+        }
+    }
 
     public async Task<IReadOnlyList<Department>> ListDepartmentsAsync(Guid? facultyId, CancellationToken ct = default)
     {
@@ -456,8 +498,75 @@ public sealed class AdminRepository : IAdminRepository
         }).ToList();
     }
 
-    public Task<Department?> GetDepartmentAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Department?>(null);
-    public Task UpsertDepartmentAsync(Department dept, CancellationToken ct = default) => Task.CompletedTask;
+    public async Task<Department?> GetDepartmentAsync(Guid id, CancellationToken ct = default)
+    {
+        var did = DecodeInt32Guid(id);
+        if (!did.HasValue) return null;
+
+        var row = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(x => x.DepartmentId == did.Value, ct);
+        if (row is null) return null;
+
+        var hodLegacyGuid = row.HodUserId.HasValue
+            ? await _db.MapUsers.AsNoTracking()
+                .Where(m => m.UserId == row.HodUserId.Value)
+                .Select(m => (Guid?)m.LegacyUserGuid)
+                .FirstOrDefaultAsync(ct)
+            : null;
+
+        return new Department
+        {
+            Id = EncodeInt32Guid(0xC2, row.DepartmentId),
+            FacultyId = EncodeInt32Guid(0xC1, row.FacultyId),
+            Code = row.DeptCode,
+            Name = row.DeptName,
+            HodUserId = hodLegacyGuid,
+            IsActive = row.IsActive,
+            CreatedAt = row.CreatedAt
+        };
+    }
+
+    public async Task UpsertDepartmentAsync(Department dept, CancellationToken ct = default)
+    {
+        var did = DecodeInt32Guid(dept.Id);
+        var facultyId = DecodeInt32Guid(dept.FacultyId);
+        if (!facultyId.HasValue)
+            throw new InvalidOperationException("Invalid faculty identifier.");
+
+        V2Department? row = null;
+        if (did.HasValue)
+            row = await _db.Departments.FirstOrDefaultAsync(x => x.DepartmentId == did.Value, ct);
+
+        long? hodUserId = null;
+        if (dept.HodUserId.HasValue)
+        {
+            hodUserId = await _db.MapUsers.AsNoTracking()
+                .Where(m => m.LegacyUserGuid == dept.HodUserId.Value)
+                .Select(m => (long?)m.UserId)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (row is null)
+        {
+            row = new V2Department
+            {
+                FacultyId = facultyId.Value,
+                DeptCode = dept.Code.Trim(),
+                DeptName = dept.Name.Trim(),
+                HodUserId = hodUserId,
+                IsActive = dept.IsActive,
+                CreatedAt = dept.CreatedAt == default ? DateTimeOffset.UtcNow : dept.CreatedAt
+            };
+            _db.Departments.Add(row);
+        }
+        else
+        {
+            row.FacultyId = facultyId.Value;
+            row.DeptCode = dept.Code.Trim();
+            row.DeptName = dept.Name.Trim();
+            row.HodUserId = hodUserId;
+            row.IsActive = dept.IsActive;
+        }
+    }
 
     public async Task<IReadOnlyList<Domain.Entities.Program>> ListProgramsAsync(CancellationToken ct = default)
     {
@@ -475,16 +584,354 @@ public sealed class AdminRepository : IAdminRepository
         }).ToList();
     }
 
-    public Task<Domain.Entities.Program?> GetProgramAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Domain.Entities.Program?>(null);
-    public Task UpsertProgramAsync(Domain.Entities.Program program, CancellationToken ct = default) => Task.CompletedTask;
+    public async Task<Domain.Entities.Program?> GetProgramAsync(Guid id, CancellationToken ct = default)
+    {
+        var pid = DecodeInt32Guid(id);
+        if (!pid.HasValue) return null;
 
-    public Task<IReadOnlyList<CurriculumVersion>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CurriculumVersion>>(Array.Empty<CurriculumVersion>());
-    public Task AddCurriculumVersionAsync(CurriculumVersion version, CancellationToken ct = default) => Task.CompletedTask;
+        var row = await _db.Programs.AsNoTracking().FirstOrDefaultAsync(x => x.ProgramId == pid.Value, ct);
+        if (row is null) return null;
 
-    public Task<IReadOnlyList<GradingScheme>> ListGradingSchemesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<GradingScheme>>(Array.Empty<GradingScheme>());
-    public Task AddGradingSchemeAsync(GradingScheme scheme, CancellationToken ct = default) => Task.CompletedTask;
+        return new Domain.Entities.Program
+        {
+            Id = EncodeInt32Guid(0xC3, row.ProgramId),
+            DepartmentId = EncodeInt32Guid(0xC2, row.DepartmentId),
+            Code = row.ProgramCode,
+            Name = row.ProgramName,
+            DegreeName = row.DegreeName,
+            DurationYears = row.DurationYears,
+            GradingSchemeId = EncodeInt32Guid(0xC4, row.GradingSchemeId),
+            IsActive = row.IsActive,
+            CreatedAt = row.CreatedAt
+        };
+    }
+
+    public async Task UpsertProgramAsync(Domain.Entities.Program program, CancellationToken ct = default)
+    {
+        var pid = DecodeInt32Guid(program.Id);
+        var departmentId = program.DepartmentId.HasValue ? DecodeInt32Guid(program.DepartmentId.Value) : null;
+        var gradingSchemeId = program.GradingSchemeId.HasValue ? DecodeInt32Guid(program.GradingSchemeId.Value) : null;
+
+        if (!departmentId.HasValue)
+            throw new InvalidOperationException("Invalid department identifier.");
+        if (!gradingSchemeId.HasValue)
+            throw new InvalidOperationException("Invalid grading scheme identifier.");
+
+        V2Program? row = null;
+        if (pid.HasValue)
+            row = await _db.Programs.FirstOrDefaultAsync(x => x.ProgramId == pid.Value, ct);
+
+        if (row is null)
+        {
+            row = new V2Program
+            {
+                DepartmentId = departmentId.Value,
+                ProgramCode = program.Code.Trim(),
+                ProgramName = program.Name.Trim(),
+                DegreeName = program.DegreeName.Trim(),
+                DurationYears = (byte)Math.Clamp(program.DurationYears, 1, 10),
+                GradingSchemeId = gradingSchemeId.Value,
+                IsActive = program.IsActive,
+                CreatedAt = program.CreatedAt == default ? DateTimeOffset.UtcNow : program.CreatedAt
+            };
+            _db.Programs.Add(row);
+        }
+        else
+        {
+            row.DepartmentId = departmentId.Value;
+            row.ProgramCode = program.Code.Trim();
+            row.ProgramName = program.Name.Trim();
+            row.DegreeName = program.DegreeName.Trim();
+            row.DurationYears = (byte)Math.Clamp(program.DurationYears, 1, 10);
+            row.GradingSchemeId = gradingSchemeId.Value;
+            row.IsActive = program.IsActive;
+        }
+    }
+
+    public async Task<IReadOnlyList<CurriculumVersion>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default)
+    {
+        var query = _db.CurriculumVersions.AsNoTracking();
+        if (programId.HasValue)
+        {
+            var pid = DecodeInt32Guid(programId.Value);
+            if (pid.HasValue) query = query.Where(x => x.ProgramId == pid.Value);
+        }
+
+        var rows = await query.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+        var yearIds = rows.Select(x => x.AcademicYearId).Distinct().ToList();
+        var yearCodes = await _db.AcademicYears.AsNoTracking()
+            .Where(x => yearIds.Contains(x.AcademicYearId))
+            .ToDictionaryAsync(x => x.AcademicYearId, x => x.YearCode, ct);
+        var programIds = rows.Select(x => x.ProgramId).Distinct().ToList();
+        var programDurations = await _db.Programs.AsNoTracking()
+            .Where(x => programIds.Contains(x.ProgramId))
+            .ToDictionaryAsync(x => x.ProgramId, x => (int)x.DurationYears, ct);
+        var versionIds = rows.Select(x => x.CurriculumVersionId).ToList();
+        var subjectCounts = await _db.CurriculumSubjects.AsNoTracking()
+            .Where(x => versionIds.Contains(x.CurriculumVersionId) && x.IsActive)
+            .GroupBy(x => x.CurriculumVersionId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
+        return rows.Select(x => new CurriculumVersion
+        {
+            Id = EncodeInt32Guid(0xC5, x.CurriculumVersionId),
+            ProgramId = EncodeInt32Guid(0xC3, x.ProgramId),
+            AcademicYear = BuildProgramAcademicSpan(
+                yearCodes.TryGetValue(x.AcademicYearId, out var yearCode) ? yearCode : string.Empty,
+                programDurations.TryGetValue(x.ProgramId, out var durationYears) ? durationYears : 0),
+            VersionName = x.VersionLabel,
+            IsActive = x.IsPublished,
+            Locked = x.IsPublished,
+            CreatedAt = x.CreatedAt,
+            Program = null!
+        }).ToList();
+    }
+
+    public async Task AddCurriculumVersionAsync(CurriculumVersion version, CancellationToken ct = default)
+    {
+        var programId = DecodeInt32Guid(version.ProgramId);
+        if (!programId.HasValue)
+            throw new InvalidOperationException("Invalid program identifier.");
+
+        var yearCode = NormalizeAcademicYearCode(version.AcademicYear);
+        var academicYear = await _db.AcademicYears.FirstOrDefaultAsync(x => x.YearCode == yearCode, ct);
+        if (academicYear is null)
+        {
+            var (startDate, endDate) = ParseAcademicYearRange(yearCode);
+            academicYear = new V2AcademicYear
+            {
+                YearCode = yearCode,
+                StartDate = startDate,
+                EndDate = endDate,
+                IsCurrent = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            _db.AcademicYears.Add(academicYear);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        var existingMax = await _db.CurriculumVersions.AsNoTracking()
+            .Where(x => x.ProgramId == programId.Value)
+            .Select(x => (int?)x.VersionNo)
+            .MaxAsync(ct);
+
+        var requestedVersionNo = TryExtractVersionNo(version.VersionName);
+        var versionNo = requestedVersionNo ?? ((existingMax ?? 0) + 1);
+        var versionLabel = string.IsNullOrWhiteSpace(version.VersionName) ? $"V{versionNo}" : version.VersionName.Trim();
+
+        _db.CurriculumVersions.Add(new V2CurriculumVersion
+        {
+            ProgramId = programId.Value,
+            AcademicYearId = academicYear.AcademicYearId,
+            VersionNo = versionNo,
+            VersionLabel = versionLabel,
+            IsPublished = version.IsActive,
+            PublishedAt = version.IsActive ? DateTimeOffset.UtcNow : null,
+            CreatedBy = null,
+            CreatedAt = version.CreatedAt == default ? DateTimeOffset.UtcNow : version.CreatedAt
+        });
+    }
+
+    public async Task<bool> IsCurriculumVersionUsedAsync(Guid versionId, CancellationToken ct = default)
+    {
+        var cvId = DecodeInt32Guid(versionId);
+        if (!cvId.HasValue) return false;
+
+        var usedByTranscript = await _db.Transcripts.AsNoTracking().AnyAsync(x => x.CurriculumVersionId == cvId.Value, ct);
+        if (usedByTranscript) return true;
+
+        var curriculumSubjectIds = await _db.CurriculumSubjects.AsNoTracking()
+            .Where(x => x.CurriculumVersionId == cvId.Value)
+            .Select(x => x.CurriculumSubjectId)
+            .ToListAsync(ct);
+
+        if (curriculumSubjectIds.Count == 0) return false;
+
+        return await _db.StudentMarks.AsNoTracking().AnyAsync(x => curriculumSubjectIds.Contains(x.CurriculumSubjectId), ct);
+    }
+
+    public async Task<IReadOnlyList<CurriculumSubject>> ListCurriculumSubjectsAsync(Guid versionId, CancellationToken ct = default)
+    {
+        var cvId = DecodeInt32Guid(versionId);
+        if (!cvId.HasValue) return Array.Empty<CurriculumSubject>();
+
+        var query =
+            from curriculumSubject in _db.CurriculumSubjects.AsNoTracking()
+            join subjectVersion in _db.SubjectVersions.AsNoTracking() on curriculumSubject.SubjectVersionId equals subjectVersion.SubjectVersionId
+            join subject in _db.Subjects.AsNoTracking() on subjectVersion.SubjectId equals subject.SubjectId
+            where curriculumSubject.CurriculumVersionId == cvId.Value
+            orderby curriculumSubject.SemesterNumber, curriculumSubject.DisplayOrder, subject.SubjectCode
+            select new { curriculumSubject, subjectVersion, subject };
+
+        var rows = await query.ToListAsync(ct);
+        return rows.Select(row => new CurriculumSubject
+        {
+            Id = EncodeInt64Guid(0xC6, row.curriculumSubject.CurriculumSubjectId),
+            VersionId = versionId,
+            SemesterNumber = row.curriculumSubject.SemesterNumber,
+            DisplayOrder = row.curriculumSubject.DisplayOrder ?? 0,
+            SubjectCode = row.subject.SubjectCode,
+            SubjectName = row.subject.SubjectName,
+            TitleOnTranscript = row.subjectVersion.TitleOnTranscript,
+            ThHours = row.curriculumSubject.ThHoursPerWeek,
+            PrHours = row.curriculumSubject.PrHoursPerWeek,
+            ThCredits = row.curriculumSubject.ThCredits,
+            PrCredits = row.curriculumSubject.PrCredits,
+            HasTheory = row.subjectVersion.HasTheory,
+            HasPractical = row.subjectVersion.HasPractical,
+            IsElective = row.curriculumSubject.IsElective,
+            IsActive = row.curriculumSubject.IsActive
+        }).ToList();
+    }
+
+    public async Task<Domain.Entities.Program?> GetProgramByCurriculumVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        var cvId = DecodeInt32Guid(versionId);
+        if (!cvId.HasValue) return null;
+
+        var programId = await _db.CurriculumVersions.AsNoTracking()
+            .Where(x => x.CurriculumVersionId == cvId.Value)
+            .Select(x => (int?)x.ProgramId)
+            .FirstOrDefaultAsync(ct);
+
+        return programId.HasValue ? await GetProgramAsync(EncodeInt32Guid(0xC3, programId.Value), ct) : null;
+    }
+
+    public async Task<Guid?> GetCurriculumVersionIdBySubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default)
+    {
+        var csId = DecodeInt64Guid(curriculumSubjectId);
+        if (!csId.HasValue) return null;
+
+        var versionId = await _db.CurriculumSubjects.AsNoTracking()
+            .Where(x => x.CurriculumSubjectId == csId.Value)
+            .Select(x => (int?)x.CurriculumVersionId)
+            .FirstOrDefaultAsync(ct);
+
+        return versionId.HasValue ? EncodeInt32Guid(0xC5, versionId.Value) : null;
+    }
+
+    public async Task UpsertCurriculumSubjectAsync(Guid? curriculumSubjectId, Guid versionId, CurriculumSubject subject, CancellationToken ct = default)
+    {
+        var cvId = DecodeInt32Guid(versionId);
+        if (!cvId.HasValue)
+            throw new InvalidOperationException("Invalid curriculum version identifier.");
+
+        var version = await _db.CurriculumVersions.AsNoTracking().FirstOrDefaultAsync(x => x.CurriculumVersionId == cvId.Value, ct)
+            ?? throw new InvalidOperationException("Curriculum version not found.");
+        var academicYearCode = await _db.AcademicYears.AsNoTracking()
+            .Where(x => x.AcademicYearId == version.AcademicYearId)
+            .Select(x => x.YearCode)
+            .FirstOrDefaultAsync(ct) ?? version.VersionLabel;
+
+        if (curriculumSubjectId.HasValue)
+        {
+            var csId = DecodeInt64Guid(curriculumSubjectId.Value);
+            if (!csId.HasValue)
+                throw new InvalidOperationException("Invalid curriculum subject identifier.");
+
+            var curriculumSubject = await _db.CurriculumSubjects.FirstOrDefaultAsync(x => x.CurriculumSubjectId == csId.Value, ct)
+                ?? throw new InvalidOperationException("Curriculum subject not found.");
+            var subjectVersion = await _db.SubjectVersions.FirstOrDefaultAsync(x => x.SubjectVersionId == curriculumSubject.SubjectVersionId, ct)
+                ?? throw new InvalidOperationException("Subject version not found.");
+            var subjectRow = await _db.Subjects.FirstOrDefaultAsync(x => x.SubjectId == subjectVersion.SubjectId, ct)
+                ?? throw new InvalidOperationException("Subject not found.");
+
+            subjectRow.SubjectCode = (subject.SubjectCode ?? string.Empty).Trim();
+            subjectRow.SubjectName = subject.SubjectName.Trim();
+            subjectRow.IsActive = subject.IsActive;
+
+            subjectVersion.VersionLabel = academicYearCode;
+            subjectVersion.TitleOnTranscript = subject.TitleOnTranscript.Trim();
+            subjectVersion.HasTheory = subject.HasTheory;
+            subjectVersion.HasPractical = subject.HasPractical;
+
+            curriculumSubject.SemesterNumber = (byte)subject.SemesterNumber;
+            curriculumSubject.DisplayOrder = subject.DisplayOrder;
+            curriculumSubject.ThHoursPerWeek = subject.ThHours;
+            curriculumSubject.PrHoursPerWeek = subject.PrHours;
+            curriculumSubject.ThCredits = subject.ThCredits;
+            curriculumSubject.PrCredits = subject.PrCredits;
+            curriculumSubject.IsElective = subject.IsElective;
+            curriculumSubject.IsActive = subject.IsActive;
+            return;
+        }
+
+        var subjectRowNew = new V2Subject
+        {
+            SubjectCode = (subject.SubjectCode ?? string.Empty).Trim(),
+            SubjectName = subject.SubjectName.Trim(),
+            IsActive = subject.IsActive,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _db.Subjects.Add(subjectRowNew);
+        await _db.SaveChangesAsync(ct);
+
+        var subjectVersionNew = new V2SubjectVersion
+        {
+            SubjectId = subjectRowNew.SubjectId,
+            VersionLabel = academicYearCode,
+            EffectiveFrom = new DateTime(version.CreatedAt.Year, 7, 1),
+            EffectiveTo = null,
+            TitleOnTranscript = subject.TitleOnTranscript.Trim(),
+            HasTheory = subject.HasTheory,
+            HasPractical = subject.HasPractical,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        _db.SubjectVersions.Add(subjectVersionNew);
+        await _db.SaveChangesAsync(ct);
+
+        _db.CurriculumSubjects.Add(new V2CurriculumSubject
+        {
+            CurriculumVersionId = cvId.Value,
+            SubjectVersionId = subjectVersionNew.SubjectVersionId,
+            SemesterNumber = (byte)subject.SemesterNumber,
+            DisplayOrder = subject.DisplayOrder,
+            ThHoursPerWeek = subject.ThHours,
+            PrHoursPerWeek = subject.PrHours,
+            ThCredits = subject.ThCredits,
+            PrCredits = subject.PrCredits,
+            IsElective = subject.IsElective,
+            IsActive = subject.IsActive
+        });
+    }
+
+    public async Task SoftDeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default)
+    {
+        var csId = DecodeInt64Guid(curriculumSubjectId);
+        if (!csId.HasValue) return;
+
+        var row = await _db.CurriculumSubjects.FirstOrDefaultAsync(x => x.CurriculumSubjectId == csId.Value, ct);
+        if (row is null) return;
+        row.IsActive = false;
+    }
+
+    public async Task<IReadOnlyList<GradingScheme>> ListGradingSchemesAsync(CancellationToken ct = default)
+    {
+        var rows = await _db.GradingSchemes.AsNoTracking().OrderBy(x => x.SchemeName).ToListAsync(ct);
+        return rows.Select(x => new GradingScheme
+        {
+            Id = EncodeInt32Guid(0xC4, x.GradingSchemeId),
+            SchemeName = x.SchemeName,
+            SchemeType = x.SchemeCode,
+            MaxGradePoint = x.MaxGradePoint,
+            IsActive = x.IsActive,
+            CreatedAt = x.CreatedAt
+        }).ToList();
+    }
+
+    public Task AddGradingSchemeAsync(GradingScheme scheme, CancellationToken ct = default)
+    {
+        _db.GradingSchemes.Add(new V2GradingScheme
+        {
+            SchemeCode = string.IsNullOrWhiteSpace(scheme.SchemeType) ? "CUSTOM" : scheme.SchemeType.Trim(),
+            SchemeName = scheme.SchemeName.Trim(),
+            MaxGradePoint = scheme.MaxGradePoint,
+            IsActive = scheme.IsActive,
+            CreatedAt = scheme.CreatedAt == default ? DateTimeOffset.UtcNow : scheme.CreatedAt
+        });
+        return Task.CompletedTask;
+    }
 
     public async Task<PagedResultDto<AdminTranscriptItemDto>> ListTranscriptsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
     {
@@ -592,5 +1039,64 @@ public sealed class AdminRepository : IAdminRepository
     {
         var b = g.ToByteArray();
         return BitConverter.ToInt32(b, 1);
+    }
+
+    private static long? DecodeInt64Guid(Guid g)
+    {
+        var b = g.ToByteArray();
+        return BitConverter.ToInt64(b, 1);
+    }
+
+    private static string NormalizeAcademicYearCode(string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            throw new InvalidOperationException("Academic year is required.");
+
+        if (trimmed.Length >= 9 && trimmed[4] == '-' && int.TryParse(trimmed[..4], out var fullStart) && int.TryParse(trimmed.Substring(5, 4), out var fullEnd))
+            return $"{fullStart}-{fullEnd % 100:00}";
+
+        if (trimmed.Length >= 7 && trimmed[4] == '-' && int.TryParse(trimmed[..4], out var shortStart) && int.TryParse(trimmed[5..], out var shortEnd))
+            return $"{shortStart}-{shortEnd:00}";
+
+        throw new InvalidOperationException("Academic year format is invalid.");
+    }
+
+    private static string BuildProgramAcademicSpan(string yearCode, int durationYears)
+    {
+        if (string.IsNullOrWhiteSpace(yearCode) || yearCode.Length < 7 || !int.TryParse(yearCode[..4], out var startYear))
+            return yearCode;
+
+        var endPart = yearCode[(yearCode.IndexOf('-') + 1)..];
+        if (!int.TryParse(endPart, out var parsedEnd))
+            return yearCode;
+
+        var endYear = endPart.Length >= 4
+            ? parsedEnd
+            : ((startYear / 100) * 100) + parsedEnd;
+
+        if (endYear < startYear)
+            endYear += 100;
+
+        if (durationYears > 1 && (endYear - startYear) <= 1)
+            endYear = startYear + durationYears;
+
+        return $"{startYear}-{endYear}";
+    }
+
+    private static (DateTime StartDate, DateTime EndDate) ParseAcademicYearRange(string yearCode)
+    {
+        var startYear = int.Parse(yearCode[..4]);
+        var endSuffix = int.Parse(yearCode[^2..]);
+        var endYear = ((startYear / 100) * 100) + endSuffix;
+        if (endYear < startYear) endYear += 100;
+
+        return (new DateTime(startYear, 7, 1), new DateTime(endYear, 6, 30));
+    }
+
+    private static int? TryExtractVersionNo(string? versionName)
+    {
+        var digits = new string((versionName ?? string.Empty).Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var value) ? value : null;
     }
 }

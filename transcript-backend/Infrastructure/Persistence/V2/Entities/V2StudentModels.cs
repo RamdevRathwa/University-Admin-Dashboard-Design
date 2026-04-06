@@ -128,6 +128,27 @@ public sealed class V2Program
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+public sealed class V2GradingScheme
+{
+    [Column("grading_scheme_id")]
+    public int GradingSchemeId { get; set; }
+
+    [Column("scheme_code")]
+    public string SchemeCode { get; set; } = string.Empty;
+
+    [Column("scheme_name")]
+    public string SchemeName { get; set; } = string.Empty;
+
+    [Column("max_grade_point")]
+    public decimal MaxGradePoint { get; set; }
+
+    [Column("is_active")]
+    public bool IsActive { get; set; }
+
+    [Column("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class V2AcademicYear
 {
     [Column("academic_year_id")]
@@ -148,4 +169,3 @@ public sealed class V2AcademicYear
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 }
-

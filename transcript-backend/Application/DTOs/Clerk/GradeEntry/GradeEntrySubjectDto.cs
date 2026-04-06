@@ -4,6 +4,8 @@ public sealed record GradeEntrySubjectDto(
     Guid CurriculumSubjectId,
     string SubjectCode,
     string SubjectName,
+    bool IsElective,
+    string? SelectedElectiveValue,
     decimal ThHours,
     decimal PrHours,
     decimal ThCredits,

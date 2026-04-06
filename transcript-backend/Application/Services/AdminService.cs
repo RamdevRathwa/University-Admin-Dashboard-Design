@@ -204,6 +204,7 @@ public sealed class AdminService : IAdminService
         var id = TryGuid(e, "id") ?? Guid.NewGuid();
         var code = GetString(e, "code") ?? string.Empty;
         var name = GetString(e, "name") ?? string.Empty;
+        var active = TryBool(e, "active") ?? true;
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
             throw new AppException("Faculty code and name are required.", 400, "validation_error");
 
@@ -211,8 +212,9 @@ public sealed class AdminService : IAdminService
         var f = existing ?? new Faculty { Id = id, CreatedAt = DateTimeOffset.UtcNow };
         f.Code = code.Trim();
         f.Name = name.Trim();
+        f.IsActive = active;
         await _repo.UpsertFacultyAsync(f, ct);
-        await _repo.AddAuditAsync(NewAudit(existing is null ? "INSERT" : "UPDATE", "Faculties", f.Id.ToString(), null, JsonSerializer.Serialize(new { f.Code, f.Name })), ct);
+        await _repo.AddAuditAsync(NewAudit(existing is null ? "INSERT" : "UPDATE", "Faculties", f.Id.ToString(), null, JsonSerializer.Serialize(new { f.Code, f.Name, f.IsActive })), ct);
         await _uow.SaveChangesAsync(ct);
     }
 
@@ -232,6 +234,7 @@ public sealed class AdminService : IAdminService
         var code = GetString(e, "code") ?? string.Empty;
         var name = GetString(e, "name") ?? string.Empty;
         var hodUserId = TryGuid(e, "hodUserId");
+        var active = TryBool(e, "active") ?? true;
 
         if (!facultyId.HasValue) throw new AppException("Faculty is required.", 400, "validation_error");
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
@@ -243,9 +246,10 @@ public sealed class AdminService : IAdminService
         d.Code = code.Trim();
         d.Name = name.Trim();
         d.HodUserId = hodUserId;
+        d.IsActive = active;
 
         await _repo.UpsertDepartmentAsync(d, ct);
-        await _repo.AddAuditAsync(NewAudit(existing is null ? "INSERT" : "UPDATE", "Departments", d.Id.ToString(), null, JsonSerializer.Serialize(new { d.FacultyId, d.Code, d.Name, d.HodUserId })), ct);
+        await _repo.AddAuditAsync(NewAudit(existing is null ? "INSERT" : "UPDATE", "Departments", d.Id.ToString(), null, JsonSerializer.Serialize(new { d.FacultyId, d.Code, d.Name, d.HodUserId, d.IsActive })), ct);
         await _uow.SaveChangesAsync(ct);
     }
 
@@ -256,6 +260,7 @@ public sealed class AdminService : IAdminService
         return list.Select(p => (object)new
         {
             id = p.Id,
+            departmentId = p.DepartmentId,
             code = p.Code,
             name = p.Name,
             degreeName = p.DegreeName,
@@ -269,17 +274,19 @@ public sealed class AdminService : IAdminService
         EnsureAdmin();
         var e = ToJsonElement(body);
         var id = TryGuid(e, "id") ?? Guid.NewGuid();
+        var departmentId = TryGuid(e, "departmentId");
         var code = GetString(e, "code") ?? string.Empty;
         var name = GetString(e, "name") ?? string.Empty;
         var degreeName = GetString(e, "degreeName") ?? string.Empty;
         var durationYears = TryInt(e, "durationYears") ?? 4;
         var gradingSchemeId = TryGuid(e, "gradingSchemeId");
 
-        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(degreeName))
-            throw new AppException("Program code, name and degree name are required.", 400, "validation_error");
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(degreeName) || !departmentId.HasValue || !gradingSchemeId.HasValue)
+            throw new AppException("Department, program code, name, degree name and grading scheme are required.", 400, "validation_error");
 
         var existing = await _repo.GetProgramAsync(id, ct);
         var p = existing ?? new Domain.Entities.Program { Id = id, CreatedAt = DateTimeOffset.UtcNow };
+        p.DepartmentId = departmentId.Value;
         p.Code = code.Trim();
         p.Name = name.Trim();
         p.DegreeName = degreeName.Trim();
@@ -332,6 +339,110 @@ public sealed class AdminService : IAdminService
 
         await _repo.AddCurriculumVersionAsync(v, ct);
         await _repo.AddAuditAsync(NewAudit("INSERT", "CurriculumVersions", v.Id.ToString(), null, JsonSerializer.Serialize(new { v.ProgramId, v.AcademicYear, v.VersionName })), ct);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<object>> ListCurriculumSubjectsAsync(Guid? versionId, CancellationToken ct = default)
+    {
+        EnsureAdmin();
+        if (!versionId.HasValue) throw new AppException("VersionId is required.", 400, "validation_error");
+
+        var program = await _repo.GetProgramByCurriculumVersionAsync(versionId.Value, ct);
+        var items = await _repo.ListCurriculumSubjectsAsync(versionId.Value, ct);
+        var locked = await _repo.IsCurriculumVersionUsedAsync(versionId.Value, ct);
+
+        return items.Select(subject => (object)new
+        {
+            id = subject.Id,
+            versionId = subject.VersionId,
+            semesterNumber = subject.SemesterNumber,
+            displayOrder = subject.DisplayOrder,
+            subjectCode = subject.SubjectCode,
+            subjectName = subject.SubjectName,
+            titleOnTranscript = subject.TitleOnTranscript,
+            thHours = subject.ThHours,
+            prHours = subject.PrHours,
+            thCredits = subject.ThCredits,
+            prCredits = subject.PrCredits,
+            totalCredits = subject.ThCredits + subject.PrCredits,
+            hasTheory = subject.HasTheory,
+            hasPractical = subject.HasPractical,
+            isElective = subject.IsElective,
+            active = subject.IsActive,
+            locked,
+            programName = program?.Name,
+            programCode = program?.Code
+        }).ToList();
+    }
+
+    public async Task UpsertCurriculumSubjectAsync(Guid? versionId, Guid? curriculumSubjectId, object body, CancellationToken ct = default)
+    {
+        EnsureAdmin();
+        if (!versionId.HasValue) throw new AppException("VersionId is required.", 400, "validation_error");
+        if (await _repo.IsCurriculumVersionUsedAsync(versionId.Value, ct))
+            throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
+
+        var e = ToJsonElement(body);
+        var subjectCode = (GetString(e, "subjectCode") ?? string.Empty).Trim();
+        var subjectName = (GetString(e, "subjectName") ?? string.Empty).Trim();
+        var titleOnTranscript = (GetString(e, "titleOnTranscript") ?? subjectName).Trim();
+        var semesterNumber = TryInt(e, "semesterNumber") ?? 0;
+        var displayOrder = TryInt(e, "displayOrder") ?? 1;
+        var thHours = TryDecimal(e, "thHours") ?? 0m;
+        var prHours = TryDecimal(e, "prHours") ?? 0m;
+        var thCredits = TryDecimal(e, "thCredits") ?? 0m;
+        var prCredits = TryDecimal(e, "prCredits") ?? 0m;
+        var hasTheory = TryBool(e, "hasTheory") ?? true;
+        var hasPractical = TryBool(e, "hasPractical") ?? false;
+        var isElective = TryBool(e, "isElective") ?? false;
+        var active = TryBool(e, "active") ?? true;
+
+        if (string.IsNullOrWhiteSpace(subjectCode) || string.IsNullOrWhiteSpace(subjectName))
+            throw new AppException("Subject code and subject name are required.", 400, "validation_error");
+        if (semesterNumber < 1 || semesterNumber > 8)
+            throw new AppException("Semester number must be between 1 and 8.", 400, "validation_error");
+
+        var subject = new CurriculumSubject
+        {
+            Id = curriculumSubjectId ?? Guid.NewGuid(),
+            VersionId = versionId.Value,
+            SemesterNumber = semesterNumber,
+            DisplayOrder = displayOrder,
+            SubjectCode = subjectCode,
+            SubjectName = subjectName,
+            TitleOnTranscript = string.IsNullOrWhiteSpace(titleOnTranscript) ? subjectName : titleOnTranscript,
+            ThHours = thHours,
+            PrHours = prHours,
+            ThCredits = thCredits,
+            PrCredits = prCredits,
+            HasTheory = hasTheory,
+            HasPractical = hasPractical,
+            IsElective = isElective,
+            IsActive = active
+        };
+
+        await _repo.UpsertCurriculumSubjectAsync(curriculumSubjectId, versionId.Value, subject, ct);
+        await _repo.AddAuditAsync(NewAudit(curriculumSubjectId.HasValue ? "UPDATE" : "INSERT", "CurriculumSubjects", subject.Id.ToString(), null, JsonSerializer.Serialize(new
+        {
+            subject.VersionId,
+            subject.SemesterNumber,
+            subject.SubjectCode,
+            subject.SubjectName,
+            subject.ThCredits,
+            subject.PrCredits
+        })), ct);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default)
+    {
+        EnsureAdmin();
+        var parentVersionId = await _repo.GetCurriculumVersionIdBySubjectAsync(curriculumSubjectId, ct);
+        if (parentVersionId.HasValue && await _repo.IsCurriculumVersionUsedAsync(parentVersionId.Value, ct))
+            throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
+
+        await _repo.SoftDeleteCurriculumSubjectAsync(curriculumSubjectId, ct);
+        await _repo.AddAuditAsync(NewAudit("DELETE", "CurriculumSubjects", curriculumSubjectId.ToString(), null, JsonSerializer.Serialize(new { inactive = true })), ct);
         await _uow.SaveChangesAsync(ct);
     }
 

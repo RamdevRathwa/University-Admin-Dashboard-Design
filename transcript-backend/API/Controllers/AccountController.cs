@@ -4,6 +4,7 @@ using Application.Interfaces;
 using Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace API.Controllers;
 
@@ -14,12 +15,15 @@ public sealed class AccountController : ControllerBase
 {
     private readonly IUserRepository _users;
     private readonly ICurrentUserService _current;
+    private readonly IAdminRepository _admin;
     private readonly IUnitOfWork _uow;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public AccountController(IUserRepository users, ICurrentUserService current, IUnitOfWork uow)
+    public AccountController(IUserRepository users, ICurrentUserService current, IAdminRepository admin, IUnitOfWork uow)
     {
         _users = users;
         _current = current;
+        _admin = admin;
         _uow = uow;
     }
 
@@ -90,4 +94,64 @@ public sealed class AccountController : ControllerBase
             user.CreatedAt
         });
     }
+
+    [HttpGet("preferences")]
+    public async Task<ActionResult<NotificationPreferencesDto>> GetPreferences(CancellationToken ct)
+    {
+        if (!_current.IsAuthenticated) throw AppException.Unauthorized();
+
+        var setting = await _admin.GetSettingAsync(GetPreferencesKey(_current.UserId), ct);
+        if (setting is null || string.IsNullOrWhiteSpace(setting.SettingValue))
+            return Ok(DefaultPreferences());
+
+        try
+        {
+            var prefs = JsonSerializer.Deserialize<NotificationPreferencesDto>(setting.SettingValue, JsonOptions);
+            return Ok(prefs ?? DefaultPreferences());
+        }
+        catch (JsonException)
+        {
+            return Ok(DefaultPreferences());
+        }
+    }
+
+    [HttpPut("preferences")]
+    public async Task<ActionResult<NotificationPreferencesDto>> UpdatePreferences([FromBody] UpdateNotificationPreferencesDto dto, CancellationToken ct)
+    {
+        if (!_current.IsAuthenticated) throw AppException.Unauthorized();
+
+        var prefs = new NotificationPreferencesDto(
+            dto.EmailNotifications,
+            dto.InAppAlerts,
+            dto.ApprovalUpdates,
+            dto.QueueUpdates,
+            dto.ReturnedCases,
+            dto.FinalApprovalQueue,
+            dto.PublishFollowUp
+        );
+
+        await _admin.UpsertSettingAsync(new Domain.Entities.SystemSetting
+        {
+            SettingKey = GetPreferencesKey(_current.UserId),
+            SettingValue = JsonSerializer.Serialize(prefs, JsonOptions),
+            UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedBy = _current.UserId
+        }, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        return Ok(prefs);
+    }
+
+    private static string GetPreferencesKey(Guid userId) => $"account_prefs:{userId:N}";
+
+    private static NotificationPreferencesDto DefaultPreferences() =>
+        new(
+            EmailNotifications: true,
+            InAppAlerts: true,
+            ApprovalUpdates: true,
+            QueueUpdates: true,
+            ReturnedCases: true,
+            FinalApprovalQueue: true,
+            PublishFollowUp: true
+        );
 }

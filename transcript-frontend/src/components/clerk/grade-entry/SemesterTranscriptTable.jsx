@@ -155,11 +155,12 @@ export default function SemesterTranscriptTable({
                         );
                       }
 
-                      const selectedLabel = options.find((option) => option.value === selectedElective)?.label;
+                      const persistedSelection = selectedElective || r.selectedElectiveValue || r.SelectedElectiveValue || "";
+                      const selectedLabel = options.find((option) => option.value === persistedSelection)?.label;
 
                       return (
                         <div className="leading-tight">
-                          <div className="text-gray-900">{selectedLabel || subjectName}</div>
+                          <div className="text-gray-900">{selectedLabel || persistedSelection || subjectName}</div>
                           {isElective ? (
                             <div className="mt-1 text-[10px] uppercase tracking-wide text-amber-700">Elective subject</div>
                           ) : null}
