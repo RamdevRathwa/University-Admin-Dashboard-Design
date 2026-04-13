@@ -20,6 +20,7 @@ function formatDateTime(v) {
 
 export default function ClerkStudentVerification() {
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState("pending");
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
@@ -32,10 +33,10 @@ export default function ClerkStudentVerification() {
     setLoading(true);
     setError("");
     try {
-      const data = await clerkVerificationService.pending(q);
+      const data = tab === "approved" ? await clerkVerificationService.approved(q) : await clerkVerificationService.pending(q);
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e?.message || "Failed to load pending verifications.");
+      setError(e?.message || "Failed to load verification records.");
     } finally {
       setLoading(false);
     }
@@ -44,13 +45,28 @@ export default function ClerkStudentVerification() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
-  const openReview = async (requestId) => {
+  const openReview = async (row) => {
+    if (!row?.requestId) return;
+
+    if (tab === "approved") {
+      setActive({
+        requestId: row.requestId,
+        createdAt: row.createdAt,
+        actedAt: row.actedAt,
+        status: "Approved",
+        student: row.student,
+        documents: [],
+      });
+      setOpen(true);
+      return;
+    }
+
     setBusy(true);
     setError("");
     try {
-      const detail = await clerkVerificationService.review(requestId);
+      const detail = await clerkVerificationService.review(row.requestId);
       // Attach an overall status hint for modal header badge.
       const pending = (detail?.documents || []).filter((d) => String(d.status || "").toLowerCase() === "pending").length;
       const returned = (detail?.documents || []).filter((d) => String(d.status || "").toLowerCase() === "returned").length;
@@ -97,6 +113,7 @@ export default function ClerkStudentVerification() {
   };
 
   const empty = !loading && (!rows || rows.length === 0);
+  const isApprovedTab = tab === "approved";
 
   return (
     <div className="space-y-6">
@@ -123,14 +140,21 @@ export default function ClerkStudentVerification() {
         }
       />
 
+      <div className="flex flex-wrap gap-2">
+        <Button variant={tab === "pending" ? "default" : "outline"} onClick={() => setTab("pending")} disabled={loading || busy}>
+          Pending / Returned
+        </Button>
+        <Button variant={tab === "approved" ? "default" : "outline"} onClick={() => setTab("approved")} disabled={loading || busy}>
+          Approved History
+        </Button>
+      </div>
+
       {error ? <Alert variant="destructive">{error}</Alert> : null}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Pending Verifications</CardTitle>
-          <CardDescription>
-            {loading ? "Loading..." : empty ? "No pending verifications." : `Showing ${rows.length} request(s).`}
-          </CardDescription>
+          <CardTitle className="text-base">{isApprovedTab ? "Approved Verification History" : "Pending Verifications"}</CardTitle>
+          <CardDescription>{loading ? "Loading..." : empty ? (isApprovedTab ? "No approved verifications yet." : "No pending verifications.") : `Showing ${rows.length} request(s).`}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -169,12 +193,12 @@ export default function ClerkStudentVerification() {
                           {r?.counts?.returned ? <span className="text-xs font-medium text-red-600">{r.counts.returned} returned</span> : null}
                         </div>
                       </TableCell>
-                      <TableCell className="py-4 text-xs text-gray-600">{formatDateTime(r?.createdAt)}</TableCell>
+                      <TableCell className="py-4 text-xs text-gray-600">{formatDateTime(r?.actedAt || r?.createdAt)}</TableCell>
                       <TableCell className="py-4">
                         <StatusBadge status={r?.status || "Pending"} />
                       </TableCell>
                       <TableCell className="py-4 text-right">
-                        <Button size="sm" onClick={() => openReview(r.requestId)} disabled={busy}>
+                        <Button size="sm" onClick={() => openReview(r)} disabled={busy}>
                           Review
                         </Button>
                       </TableCell>

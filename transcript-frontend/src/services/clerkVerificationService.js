@@ -5,6 +5,10 @@ export const clerkVerificationService = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : "";
     return apiRequest(`/api/clerk/verification/pending${qs}`);
   },
+  approved(q) {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+    return apiRequest(`/api/clerk/verification/approved${qs}`);
+  },
   review(requestId) {
     return apiRequest(`/api/clerk/verification/${encodeURIComponent(requestId)}`);
   },

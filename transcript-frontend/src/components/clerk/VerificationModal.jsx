@@ -19,6 +19,7 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
   const [remarks, setRemarks] = useState("");
   const student = data?.student;
   const docs = useMemo(() => (data?.documents || []).slice(), [data]);
+  const readOnly = /approved/i.test(String(data?.status || ""));
   const academicYear =
     student?.admissionYear && student?.graduationYear
       ? `${student.admissionYear}-${student.graduationYear}`
@@ -61,6 +62,7 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
                 <InfoRow label="Nationality" value={student?.nationality} />
                 <InfoRow label="Birth Place" value={student?.birthPlace} />
                 <InfoRow label="Address" value={student?.address} />
+                {readOnly ? <InfoRow label="Approved At" value={data?.actedAt || data?.createdAt} /> : null}
               </CardContent>
             </Card>
 
@@ -87,10 +89,10 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
                   <Table>
                     <TableHeader className="sticky top-0 z-10 bg-gray-50">
                       <TableRow>
-                        <TableHead className="w-[180px]">Type</TableHead>
+                        <TableHead className="w-45">Type</TableHead>
                         <TableHead>File</TableHead>
-                        <TableHead className="w-[140px]">Status</TableHead>
-                        <TableHead className="w-[120px]" />
+                        <TableHead className="w-35">Status</TableHead>
+                        <TableHead className="w-30" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -98,7 +100,7 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
                         docs.map((d) => (
                           <TableRow key={d.id} className="hover:bg-gray-50">
                             <TableCell className="font-medium">{typeLabel(d.type)}</TableCell>
-                            <TableCell className="max-w-[360px] truncate" title={d.fileName}>
+                            <TableCell className="max-w-90 truncate" title={d.fileName}>
                               {d.fileName || "-"}
                             </TableCell>
                             <TableCell>
@@ -126,16 +128,19 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
 
             <Card className="shadow-none">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Remarks</CardTitle>
+                <CardTitle className="text-base">{readOnly ? "Review Notes" : "Remarks"}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <Textarea
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
+                  readOnly={readOnly}
                   placeholder="Add remarks (required for Return)"
                   rows={4}
                 />
-                <p className="text-xs text-gray-500">Return requires remarks. Approve is allowed without remarks.</p>
+                <p className="text-xs text-gray-500">
+                  {readOnly ? "This record has already been approved and is kept here for history." : "Return requires remarks. Approve is allowed without remarks."}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -145,12 +150,16 @@ export default function VerificationModal({ open, data, onApprove, onReturn, onC
           <Button variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={() => onReturn?.(remarks)} disabled={!canAct || !String(remarks || "").trim()}>
-            Return to Student
-          </Button>
-          <Button onClick={() => onApprove?.(remarks)} disabled={!canAct}>
-            Approve Verification
-          </Button>
+          {!readOnly ? (
+            <>
+              <Button variant="destructive" onClick={() => onReturn?.(remarks)} disabled={!canAct || !String(remarks || "").trim()}>
+                Return to Student
+              </Button>
+              <Button onClick={() => onApprove?.(remarks)} disabled={!canAct}>
+                Approve Verification
+              </Button>
+            </>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -161,7 +170,7 @@ function InfoRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-2 last:border-b-0">
       <p className="text-xs font-medium text-gray-500">{label}</p>
-      <p className="text-xs text-right text-gray-900 break-words">{value || "-"}</p>
+      <p className="text-xs text-right text-gray-900 wrap-break-word">{value || "-"}</p>
     </div>
   );
 }

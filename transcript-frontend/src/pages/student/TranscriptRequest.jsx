@@ -46,7 +46,7 @@ export default function TranscriptRequest() {
     [user?.email, user?.id]
   );
 
-  const [step, setStep] = useState("academic"); // academic | personal | documents
+  const [step, setStep] = useState("academic"); // academic | personal | marksheets | identity
   const [submitting, setSubmitting] = useState(false);
 
   const [errors, setErrors] = useState({});
@@ -65,7 +65,7 @@ export default function TranscriptRequest() {
   });
 
   const [documents, setDocuments] = useState({
-    marksheets: [],
+    marksheetsBySemester: {},
     govtId: null,
     authorityLetter: null,
   });
@@ -100,6 +100,27 @@ export default function TranscriptRequest() {
   );
 
   const selectedProgramDuration = selectedProgram?.durationYears || 0;
+  const semesterNumbers = useMemo(
+    () => Array.from({ length: selectedProgramDuration ? selectedProgramDuration * 2 : 0 }, (_, index) => index + 1),
+    [selectedProgramDuration]
+  );
+
+  useEffect(() => {
+    setDocuments((prev) => {
+      if (!semesterNumbers.length) {
+        return prev.marksheetsBySemester && Object.keys(prev.marksheetsBySemester).length
+          ? { ...prev, marksheetsBySemester: {} }
+          : prev;
+      }
+
+      const next = {};
+      semesterNumbers.forEach((semester) => {
+        next[semester] = prev.marksheetsBySemester?.[semester] || null;
+      });
+
+      return { ...prev, marksheetsBySemester: next };
+    });
+  }, [semesterNumbers]);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -168,12 +189,12 @@ export default function TranscriptRequest() {
 
   const documentCompletion = useMemo(() => {
     const checks = [
-      Array.isArray(documents.marksheets) && documents.marksheets.length > 0,
+      semesterNumbers.length > 0 && semesterNumbers.every((semester) => !!documents.marksheetsBySemester?.[semester]),
       !!documents.govtId,
       authorizeRepresentative === "no" || !!documents.authorityLetter,
     ];
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [authorizeRepresentative, documents]);
+  }, [authorizeRepresentative, documents, semesterNumbers]);
 
   const overallCompletion = useMemo(() => {
     return Math.round((academicCompletion + personalCompletion + documentCompletion) / 3);
@@ -198,15 +219,25 @@ export default function TranscriptRequest() {
         icon: UserRound,
       },
       {
-        key: "documents",
+        key: "marksheets",
         title: "Step 3",
-        label: "Document Uploads",
-        description: "Upload marksheets, government ID, and an authority letter only when needed.",
+        label: "Semester Marksheet Uploads",
+        description: "Upload one marksheet for each semester in your program.",
+        percent: semesterNumbers.length
+          ? Math.round((semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester]).length / semesterNumbers.length) * 100)
+          : 0,
+        icon: FileCheck2,
+      },
+      {
+        key: "identity",
+        title: "Step 4",
+        label: "Identity Documents",
+        description: "Upload your government ID and authority letter only if applicable.",
         percent: documentCompletion,
         icon: FileCheck2,
       },
     ],
-    [academicCompletion, personalCompletion, documentCompletion]
+    [academicCompletion, personalCompletion, documentCompletion, documents.marksheetsBySemester, semesterNumbers]
   );
 
   const currentStepIndex = steps.findIndex((item) => item.key === step);
@@ -236,7 +267,7 @@ export default function TranscriptRequest() {
       if (parsed?.authorizeRepresentative === "yes" || parsed?.authorizeRepresentative === "no") {
         setAuthorizeRepresentative(parsed.authorizeRepresentative);
       }
-      if (["academic", "personal", "documents"].includes(parsed?.step)) {
+      if (["academic", "personal", "marksheets", "identity"].includes(parsed?.step)) {
         setStep(parsed.step);
       }
     } catch {
@@ -389,6 +420,18 @@ export default function TranscriptRequest() {
     if (errors[name]) setErrors((p) => ({ ...p, [name]: null }));
   };
 
+  const setSemesterMarksheet = (semester, file) => {
+    setDocuments((p) => ({
+      ...p,
+      marksheetsBySemester: {
+        ...p.marksheetsBySemester,
+        [semester]: file,
+      },
+    }));
+    const key = `semester-${semester}`;
+    if (errors[key]) setErrors((p) => ({ ...p, [key]: null }));
+  };
+
   const getStepErrors = (s) => {
     const next = {};
     if (s === "academic") {
@@ -419,11 +462,16 @@ export default function TranscriptRequest() {
       if (!address) next.address = "Permanent address is required";
       else if (address.length < 10) next.address = "Permanent address is too short";
     }
-    if (s === "documents") {
-      if (!documents.marksheets || documents.marksheets.length === 0) next.marksheets = "Upload at least one marksheet";
-      else if (documents.marksheets.some((file) => !isAllowedFile(file))) next.marksheets = "Marksheets must be PDF, JPG, JPEG, or PNG files";
-      else if (documents.marksheets.some((file) => file.size > MAX_FILE_SIZE)) next.marksheets = "Each marksheet file must be 20 MB or smaller";
-
+    if (s === "marksheets") {
+      if (!semesterNumbers.length) next.marksheets = "Select a program first";
+      semesterNumbers.forEach((semester) => {
+        const file = documents.marksheetsBySemester?.[semester];
+        if (!file) next[`semester-${semester}`] = `Upload Semester ${semester} marksheet`;
+        else if (!isAllowedFile(file)) next[`semester-${semester}`] = `Semester ${semester} marksheet must be PDF, JPG, JPEG, or PNG`;
+        else if (file.size > MAX_FILE_SIZE) next[`semester-${semester}`] = `Semester ${semester} marksheet must be 20 MB or smaller`;
+      });
+    }
+    if (s === "identity") {
       if (!documents.govtId) next.govtId = "Government ID is required";
       else if (!isAllowedFile(documents.govtId)) next.govtId = "Government ID must be PDF, JPG, JPEG, or PNG";
       else if (documents.govtId.size > MAX_FILE_SIZE) next.govtId = "Government ID file must be 20 MB or smaller";
@@ -455,12 +503,12 @@ export default function TranscriptRequest() {
     }
 
     setErrors({});
-    setStep((p) => (p === "academic" ? "personal" : p === "personal" ? "documents" : "documents"));
+    setStep((p) => (p === "academic" ? "personal" : p === "personal" ? "marksheets" : p === "marksheets" ? "identity" : "identity"));
   };
 
   const goPrev = () => {
     setErrors({});
-    setStep((p) => (p === "documents" ? "personal" : p === "personal" ? "academic" : "academic"));
+    setStep((p) => (p === "identity" ? "marksheets" : p === "marksheets" ? "personal" : p === "personal" ? "academic" : "academic"));
   };
 
   const submit = async (e) => {
@@ -468,7 +516,8 @@ export default function TranscriptRequest() {
 
     const a = getStepErrors("academic");
     const p = getStepErrors("personal");
-    const d = getStepErrors("documents");
+    const m = getStepErrors("marksheets");
+    const d = getStepErrors("identity");
 
     if (Object.keys(a).length) {
       setErrors(a);
@@ -480,9 +529,14 @@ export default function TranscriptRequest() {
       setStep("personal");
       return;
     }
+    if (Object.keys(m).length) {
+      setErrors(m);
+      setStep("marksheets");
+      return;
+    }
     if (Object.keys(d).length) {
       setErrors(d);
-      setStep("documents");
+      setStep("identity");
       return;
     }
 
@@ -495,7 +549,18 @@ export default function TranscriptRequest() {
       const draft = await transcriptService.createDraft();
       const requestId = draft?.id || draft?.Id;
 
-      await studentDocumentsService.upload(requestId, "Marksheet", documents.marksheets || []);
+      const marksheetFiles = semesterNumbers
+        .map((semester) => {
+          const file = documents.marksheetsBySemester?.[semester];
+          if (!file) return null;
+          return new File([file], `Semester ${semester} - ${file.name}`, {
+            type: file.type || "application/octet-stream",
+            lastModified: file.lastModified || Date.now(),
+          });
+        })
+        .filter(Boolean);
+
+      await studentDocumentsService.upload(requestId, "Marksheet", marksheetFiles);
       await studentDocumentsService.upload(requestId, "GovernmentId", documents.govtId ? [documents.govtId] : []);
       if (authorizeRepresentative === "yes" && documents.authorityLetter) {
         await studentDocumentsService.upload(requestId, "AuthorityLetter", [documents.authorityLetter]);
@@ -532,7 +597,7 @@ export default function TranscriptRequest() {
               <CardTitle>Transcript Request Form</CardTitle>
               <CardDescription>Academic details, personal information, and the required documents must be completed before submission.</CardDescription>
             </div>
-            <div className="min-w-[220px] rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+            <div className="min-w-55 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-[#1e40af]">Overall Completion</p>
               <div className="mt-1 flex items-center justify-between">
                 <p className="text-2xl font-bold text-[#1e3a8a]">{overallCompletion}%</p>
@@ -793,95 +858,133 @@ export default function TranscriptRequest() {
               </Card>
             ) : null}
 
-            {step === "documents" ? (
+            {step === "marksheets" ? (
               <Card className="border-blue-100 bg-blue-50/40 shadow-none">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Step 3: Document Uploads</CardTitle>
-                  <CardDescription>Upload your marksheets and government ID. Add an authority letter only if someone is authorized to act on your behalf.</CardDescription>
+                  <CardTitle className="text-base">Step 3: Semester Marksheet Uploads</CardTitle>
+                  <CardDescription>Upload one marksheet file for each semester. The uploaded file name will be tagged by semester automatically.</CardDescription>
                 </CardHeader>
                 <CardContent>
                 <div className="space-y-6">
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Semester Slots</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.length}</p>
+                      <p className="mt-1 text-sm text-gray-500">required marksheets</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Selected</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester]).length}</p>
+                      <p className="mt-1 text-sm text-gray-500">semester files chosen</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Next Step</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">Govt ID</p>
+                      <p className="mt-1 text-sm text-gray-500">separate identity upload</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5">
+                    {semesterNumbers.length ? (
+                      semesterNumbers.map((semester) => {
+                        const file = documents.marksheetsBySemester?.[semester] || null;
+                        const errorKey = `semester-${semester}`;
+
+                        return (
+                          <div key={semester} className="space-y-2 rounded-xl border border-gray-200 p-4">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <Label htmlFor={`semester-${semester}`}>Semester {semester} Marksheet</Label>
+                              <p className="text-xs text-gray-500">{file ? file.name : "No file selected"}</p>
+                            </div>
+                            <Input
+                              id={`semester-${semester}`}
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={(e) => setSemesterMarksheet(semester, (e.target.files && e.target.files[0]) || null)}
+                            />
+                            {errors[errorKey] ? <p className="text-xs text-red-600">{errors[errorKey]}</p> : null}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <Alert>Select a program first to reveal the semester-wise marksheet upload slots.</Alert>
+                    )}
+                  </div>
+                </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {step === "identity" ? (
+              <Card className="border-blue-100 bg-blue-50/40 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Step 4: Government ID</CardTitle>
+                  <CardDescription>Upload your government ID separately from the semester-wise marksheets. Add an authority letter only if someone is authorized to act on your behalf.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                <div className="space-y-6 rounded-2xl border border-gray-200 bg-white p-5">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Marksheets</p>
-                      <p className="mt-2 text-2xl font-bold text-gray-900">{documents.marksheets?.length || 0}</p>
-                      <p className="mt-1 text-sm text-gray-500">files selected</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester]).length}</p>
+                      <p className="mt-1 text-sm text-gray-500">semester files selected</p>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-white p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Government ID</p>
                       <p className="mt-2 text-2xl font-bold text-gray-900">{documents.govtId ? "1" : "0"}</p>
                       <p className="mt-1 text-sm text-gray-500">file selected</p>
                     </div>
-                    <div className="rounded-xl border border-gray-200 bg-white p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Authority Letter</p>
-                      <p className="mt-2 text-2xl font-bold text-gray-900">{authorizeRepresentative === "yes" ? (documents.authorityLetter ? "1" : "0") : "Optional"}</p>
-                      <p className="mt-1 text-sm text-gray-500">{authorizeRepresentative === "yes" ? "file selected" : "not required"}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="govtId">Government ID</Label>
+                    <Input
+                      id="govtId"
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => setDoc("govtId", (e.target.files && e.target.files[0]) || null)}
+                    />
+                    {errors.govtId ? <p className="text-xs text-red-600">{errors.govtId}</p> : null}
+                  </div>
+
+                  <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                    <div className="space-y-1">
+                      <Label>Are you authorizing another person to act on your behalf?</Label>
+                      <p className="text-sm text-gray-600">If you select Yes, you will need to upload an authority letter.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        type="button"
+                        variant={authorizeRepresentative === "no" ? "default" : "outline"}
+                        onClick={() => {
+                          setAuthorizeRepresentative("no");
+                          setDoc("authorityLetter", null);
+                        }}
+                      >
+                        No
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={authorizeRepresentative === "yes" ? "default" : "outline"}
+                        onClick={() => setAuthorizeRepresentative("yes")}
+                      >
+                        Yes
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="space-y-6 rounded-2xl border border-gray-200 bg-white p-5">
-                    <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-                      <div className="space-y-1">
-                        <Label>Are you authorizing another person to act on your behalf?</Label>
-                        <p className="text-sm text-gray-600">If you select Yes, you will need to upload an authority letter.</p>
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          type="button"
-                          variant={authorizeRepresentative === "no" ? "default" : "outline"}
-                          onClick={() => {
-                            setAuthorizeRepresentative("no");
-                            setDoc("authorityLetter", null);
-                          }}
-                        >
-                          No
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={authorizeRepresentative === "yes" ? "default" : "outline"}
-                          onClick={() => setAuthorizeRepresentative("yes")}
-                        >
-                          Yes
-                        </Button>
-                      </div>
-                    </div>
-
+                  {authorizeRepresentative === "yes" ? (
                     <div className="space-y-2">
-                      <Label htmlFor="marksheets">Marksheets (Multiple)</Label>
+                      <Label htmlFor="authorityLetter">Authority Letter</Label>
                       <Input
-                        id="marksheets"
-                        type="file"
-                        multiple
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => setDoc("marksheets", Array.from(e.target.files || []))}
-                      />
-                      {errors.marksheets ? <p className="text-xs text-red-600">{errors.marksheets}</p> : null}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="govtId">Government ID</Label>
-                      <Input
-                        id="govtId"
+                        id="authorityLetter"
                         type="file"
                         accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => setDoc("govtId", (e.target.files && e.target.files[0]) || null)}
+                        onChange={(e) => setDoc("authorityLetter", (e.target.files && e.target.files[0]) || null)}
                       />
-                      {errors.govtId ? <p className="text-xs text-red-600">{errors.govtId}</p> : null}
+                      {errors.authorityLetter ? <p className="text-xs text-red-600">{errors.authorityLetter}</p> : null}
                     </div>
-
-                    {authorizeRepresentative === "yes" ? (
-                      <div className="space-y-2">
-                        <Label htmlFor="authorityLetter">Authority Letter</Label>
-                        <Input
-                          id="authorityLetter"
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => setDoc("authorityLetter", (e.target.files && e.target.files[0]) || null)}
-                        />
-                        {errors.authorityLetter ? <p className="text-xs text-red-600">{errors.authorityLetter}</p> : null}
-                      </div>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
                 </CardContent>
               </Card>
@@ -900,7 +1003,7 @@ export default function TranscriptRequest() {
                   Previous
                 </Button>
 
-                {step !== "documents" ? (
+                {step !== "identity" ? (
                   <Button type="button" disabled={submitting} onClick={goNext}>
                     Save and Continue
                   </Button>

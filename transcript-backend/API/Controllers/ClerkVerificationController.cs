@@ -118,6 +118,65 @@ public sealed class ClerkVerificationController : ControllerBase
         return Ok(shaped);
     }
 
+    [HttpGet("approved")]
+    public async Task<IActionResult> Approved([FromQuery] string? q, CancellationToken ct)
+    {
+        var term = (q ?? string.Empty).Trim();
+
+        var query =
+            from a in _db.TranscriptApprovals.AsNoTracking()
+            join r in _db.TranscriptRequests.AsNoTracking() on a.TranscriptRequestId equals r.TranscriptRequestId
+            join mr in _db.MapRequests.AsNoTracking() on r.TranscriptRequestId equals mr.TranscriptRequestId
+            join s in _db.Students.AsNoTracking() on r.StudentId equals s.StudentId
+            join u in _db.Users.AsNoTracking() on s.UserId equals u.UserId
+            join prg in _db.Programs.AsNoTracking() on s.ProgramId equals prg.ProgramId into pj
+            from prg in pj.DefaultIfEmpty()
+            where a.RoleId == (short)UserRole.Clerk && a.ActionCode == "Approve"
+            orderby a.ActedAt descending
+            select new
+            {
+                r.TranscriptRequestId,
+                legacyRequestId = mr.LegacyRequestGuid,
+                r.CreatedAt,
+                actedAt = a.ActedAt,
+                studentName = u.FullName,
+                email = u.Email,
+                mobile = u.Mobile,
+                prn = s.Prn,
+                program = prg != null ? prg.ProgramCode : null
+            };
+
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            query = query.Where(x =>
+                x.studentName.Contains(term) ||
+                (x.email != null && x.email.Contains(term)) ||
+                (x.mobile != null && x.mobile.Contains(term)) ||
+                (x.prn != null && x.prn.Contains(term)));
+        }
+
+        var list = await query.Take(250).ToListAsync(ct);
+        return Ok(list.Select(r => new
+        {
+            requestId = r.legacyRequestId,
+            createdAt = r.CreatedAt,
+            actedAt = r.actedAt,
+            status = "Approved",
+            student = new
+            {
+                id = (Guid?)null,
+                name = r.studentName,
+                email = r.email,
+                mobile = r.mobile,
+                prn = r.prn,
+                program = r.program,
+                department = (string?)null,
+                faculty = (string?)null
+            },
+            counts = new { pending = 0, returned = 0, approved = 0, total = 0 }
+        }));
+    }
+
     [HttpGet("{requestId:guid}")]
     public async Task<IActionResult> Review(Guid requestId, CancellationToken ct)
     {
@@ -126,9 +185,6 @@ public sealed class ClerkVerificationController : ControllerBase
 
         var r = await _db.TranscriptRequests.AsNoTracking().FirstOrDefaultAsync(x => x.TranscriptRequestId == mr.TranscriptRequestId, ct);
         if (r is null) throw AppException.NotFound("Transcript request not found.");
-
-        if (r.CurrentStageRoleId != (short)UserRole.Clerk)
-            throw new AppException("Only clerk-stage submitted requests can be verified.", 400, "invalid_stage");
 
         var docs = await _db.TranscriptRequestDocuments.AsNoTracking()
             .Where(d => d.TranscriptRequestId == r.TranscriptRequestId)
