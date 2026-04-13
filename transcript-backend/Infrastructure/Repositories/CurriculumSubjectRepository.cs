@@ -23,13 +23,17 @@ public sealed class CurriculumSubjectRepository : ICurriculumSubjectRepository
 
         if (!programId.HasValue) return Array.Empty<CurriculumSubject>();
 
-        var cvId = await _db.CurriculumVersions.AsNoTracking()
-            .Where(cv => cv.ProgramId == programId.Value)
-            .OrderByDescending(cv => cv.IsPublished)
-            .ThenByDescending(cv => cv.AcademicYearId)
-            .ThenByDescending(cv => cv.VersionNo)
-            .Select(cv => (int?)cv.CurriculumVersionId)
-            .FirstOrDefaultAsync(ct);
+        var cvId = await (
+            from cv in _db.CurriculumVersions.AsNoTracking()
+            where cv.ProgramId == programId.Value
+            let activeSubjectCount = _db.CurriculumSubjects.Count(cs =>
+                cs.CurriculumVersionId == cv.CurriculumVersionId && cs.IsActive)
+            orderby activeSubjectCount > 0 descending,
+                cv.IsPublished descending,
+                cv.AcademicYearId descending,
+                cv.VersionNo descending
+            select (int?)cv.CurriculumVersionId
+        ).FirstOrDefaultAsync(ct);
 
         if (!cvId.HasValue) return Array.Empty<CurriculumSubject>();
 
@@ -93,4 +97,3 @@ public sealed class CurriculumSubjectRepository : ICurriculumSubjectRepository
         }).ToList();
     }
 }
-

@@ -40,7 +40,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         var root = ResolveRoot(_opt.RootPath);
         Directory.CreateDirectory(root);
 
-        var fileName = $"MSU_Transcript_{t.Id:N}.pdf";
+        var fileName = GenerateTranscriptFileName(t.Id);
         var absPath = Path.Combine(root, fileName);
 
         var doc = new OfficialTranscriptDocument(t, verificationCode);
@@ -65,6 +65,11 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         var basePath = (rootPath ?? "Storage/Transcripts").Trim().TrimEnd('\\', '/');
         if (string.IsNullOrWhiteSpace(basePath)) basePath = "Storage/Transcripts";
         return $"{basePath.Replace('\\', '/')}/{fileName}";
+    }
+
+    private static string GenerateTranscriptFileName(Guid transcriptId)
+    {
+        return $"MSU_Transcript_{transcriptId:N}_{DateTime.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}.pdf";
     }
 
     private static string GenerateVerificationCode()

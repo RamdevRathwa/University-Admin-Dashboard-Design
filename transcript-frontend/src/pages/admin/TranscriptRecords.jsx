@@ -35,6 +35,7 @@ export default function TranscriptRecords() {
   const [rows, setRows] = useState([]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +69,27 @@ export default function TranscriptRecords() {
       await load();
     } catch (e) {
       toast({ title: "Publish failed", description: e?.message || "Unable to publish transcript.", variant: "destructive" });
+    }
+  };
+
+  const download = async (t) => {
+    const transcriptId = t?.id || t?.transcriptId;
+    if (!transcriptId) return;
+
+    setDownloadingId(transcriptId);
+    try {
+      const url = adminService.getTranscriptDownloadUrl(transcriptId);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch (e) {
+      toast({ title: "Download failed", description: e?.message || "Unable to download transcript.", variant: "destructive" });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -177,6 +199,10 @@ export default function TranscriptRecords() {
                           <Button variant="outline" className="rounded-xl" onClick={() => review(t)}>
                             View
                           </Button>
+                          <Button variant="outline" className="rounded-xl" onClick={() => download(t)} disabled={downloadingId === (t.id || t.transcriptId)}>
+                            <Download className="h-4 w-4 mr-2" />
+                            {downloadingId === (t.id || t.transcriptId) ? "Downloading..." : "Download"}
+                          </Button>
                           <Button
                             className="rounded-xl bg-[#1e40af] hover:bg-[#1e3a8a]"
                             onClick={() => publish(t)}
@@ -226,9 +252,9 @@ export default function TranscriptRecords() {
             <Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>
               Close
             </Button>
-            <Button variant="outline" className="rounded-xl" disabled title="Download requires backend endpoint">
+            <Button variant="outline" className="rounded-xl" onClick={() => download(selected)} disabled={!selected || downloadingId === (selected?.id || selected?.transcriptId)}>
               <Download className="h-4 w-4 mr-2" />
-              Download Copy
+              {downloadingId === (selected?.id || selected?.transcriptId) ? "Downloading..." : "Download Copy"}
             </Button>
             <Button className="rounded-xl bg-[#1e40af] hover:bg-[#1e3a8a]" disabled>
               <CheckCircle2 className="h-4 w-4 mr-2" />

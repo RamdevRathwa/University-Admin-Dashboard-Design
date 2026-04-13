@@ -4,6 +4,6 @@ public enum ApprovalAction
 {
     Forward = 1,
     Approve = 2,
-    Reject = 3
+    Reject = 3,
+    Return = 4
 }
-

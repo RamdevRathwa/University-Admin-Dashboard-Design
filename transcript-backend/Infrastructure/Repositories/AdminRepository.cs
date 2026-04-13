@@ -683,9 +683,42 @@ public sealed class AdminRepository : IAdminRepository
             VersionName = x.VersionLabel,
             IsActive = x.IsPublished,
             Locked = x.IsPublished,
+            SubjectCount = subjectCounts.TryGetValue(x.CurriculumVersionId, out var count) ? count : 0,
             CreatedAt = x.CreatedAt,
             Program = null!
         }).ToList();
+    }
+
+    public async Task<CurriculumVersion?> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        var cvId = DecodeInt32Guid(versionId);
+        if (!cvId.HasValue) return null;
+
+        var row = await _db.CurriculumVersions.AsNoTracking().FirstOrDefaultAsync(x => x.CurriculumVersionId == cvId.Value, ct);
+        if (row is null) return null;
+
+        var yearCode = await _db.AcademicYears.AsNoTracking()
+            .Where(x => x.AcademicYearId == row.AcademicYearId)
+            .Select(x => x.YearCode)
+            .FirstOrDefaultAsync(ct) ?? string.Empty;
+        var durationYears = await _db.Programs.AsNoTracking()
+            .Where(x => x.ProgramId == row.ProgramId)
+            .Select(x => (int)x.DurationYears)
+            .FirstOrDefaultAsync(ct);
+
+        return new CurriculumVersion
+        {
+            Id = EncodeInt32Guid(0xC5, row.CurriculumVersionId),
+            ProgramId = EncodeInt32Guid(0xC3, row.ProgramId),
+            AcademicYear = BuildProgramAcademicSpan(yearCode, durationYears),
+            VersionName = row.VersionLabel,
+            IsActive = row.IsPublished,
+            Locked = row.IsPublished,
+            SubjectCount = await _db.CurriculumSubjects.AsNoTracking()
+                .CountAsync(x => x.CurriculumVersionId == row.CurriculumVersionId && x.IsActive, ct),
+            CreatedAt = row.CreatedAt,
+            Program = null!
+        };
     }
 
     public async Task AddCurriculumVersionAsync(CurriculumVersion version, CancellationToken ct = default)
@@ -906,6 +939,84 @@ public sealed class AdminRepository : IAdminRepository
         row.IsActive = false;
     }
 
+    public async Task<int> CloneCurriculumSubjectsAsync(Guid sourceVersionId, Guid targetVersionId, CancellationToken ct = default)
+    {
+        var sourceCvId = DecodeInt32Guid(sourceVersionId);
+        var targetCvId = DecodeInt32Guid(targetVersionId);
+        if (!sourceCvId.HasValue || !targetCvId.HasValue)
+            throw new InvalidOperationException("Invalid curriculum version identifier.");
+        if (sourceCvId.Value == targetCvId.Value)
+            throw new InvalidOperationException("Source and target versions must be different.");
+
+        var sourceVersion = await _db.CurriculumVersions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.CurriculumVersionId == sourceCvId.Value, ct)
+            ?? throw new InvalidOperationException("Source curriculum version not found.");
+        var targetVersion = await _db.CurriculumVersions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.CurriculumVersionId == targetCvId.Value, ct)
+            ?? throw new InvalidOperationException("Target curriculum version not found.");
+
+        if (sourceVersion.ProgramId != targetVersion.ProgramId)
+            throw new InvalidOperationException("Curriculum subjects can only be cloned within the same program.");
+
+        var targetHasSubjects = await _db.CurriculumSubjects.AsNoTracking()
+            .AnyAsync(x => x.CurriculumVersionId == targetCvId.Value && x.IsActive, ct);
+        if (targetHasSubjects)
+            throw new InvalidOperationException("Target curriculum version already has subjects.");
+
+        var targetAcademicYearCode = await _db.AcademicYears.AsNoTracking()
+            .Where(x => x.AcademicYearId == targetVersion.AcademicYearId)
+            .Select(x => x.YearCode)
+            .FirstOrDefaultAsync(ct) ?? targetVersion.VersionLabel;
+
+        var sourceRows = await (
+            from curriculumSubject in _db.CurriculumSubjects.AsNoTracking()
+            join subjectVersion in _db.SubjectVersions.AsNoTracking() on curriculumSubject.SubjectVersionId equals subjectVersion.SubjectVersionId
+            join subject in _db.Subjects.AsNoTracking() on subjectVersion.SubjectId equals subject.SubjectId
+            where curriculumSubject.CurriculumVersionId == sourceCvId.Value && curriculumSubject.IsActive
+            orderby curriculumSubject.SemesterNumber, curriculumSubject.DisplayOrder, subject.SubjectCode
+            select new { curriculumSubject, subjectVersion, subject }
+        ).ToListAsync(ct);
+
+        foreach (var row in sourceRows)
+        {
+            var clonedSubjectVersion = await _db.SubjectVersions.FirstOrDefaultAsync(x =>
+                x.SubjectId == row.subject.SubjectId && x.VersionLabel == targetAcademicYearCode, ct);
+
+            if (clonedSubjectVersion is null)
+            {
+                clonedSubjectVersion = new V2SubjectVersion
+                {
+                    SubjectId = row.subject.SubjectId,
+                    VersionLabel = targetAcademicYearCode,
+                    EffectiveFrom = new DateTime(targetVersion.CreatedAt.Year, 7, 1),
+                    EffectiveTo = null,
+                    TitleOnTranscript = row.subjectVersion.TitleOnTranscript,
+                    HasTheory = row.subjectVersion.HasTheory,
+                    HasPractical = row.subjectVersion.HasPractical,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                _db.SubjectVersions.Add(clonedSubjectVersion);
+                await _db.SaveChangesAsync(ct);
+            }
+
+            _db.CurriculumSubjects.Add(new V2CurriculumSubject
+            {
+                CurriculumVersionId = targetCvId.Value,
+                SubjectVersionId = clonedSubjectVersion.SubjectVersionId,
+                SemesterNumber = row.curriculumSubject.SemesterNumber,
+                DisplayOrder = row.curriculumSubject.DisplayOrder,
+                ThHoursPerWeek = row.curriculumSubject.ThHoursPerWeek,
+                PrHoursPerWeek = row.curriculumSubject.PrHoursPerWeek,
+                ThCredits = row.curriculumSubject.ThCredits,
+                PrCredits = row.curriculumSubject.PrCredits,
+                IsElective = row.curriculumSubject.IsElective,
+                IsActive = row.curriculumSubject.IsActive
+            });
+        }
+
+        return sourceRows.Count;
+    }
+
     public async Task<IReadOnlyList<GradingScheme>> ListGradingSchemesAsync(CancellationToken ct = default)
     {
         var rows = await _db.GradingSchemes.AsNoTracking().OrderBy(x => x.SchemeName).ToListAsync(ct);
@@ -979,9 +1090,10 @@ public sealed class AdminRepository : IAdminRepository
             names.TryGetValue(uid, out var nm);
 
             var st = (r.IsLocked ?? false) ? "Locked" : "Approved";
+            var id = gid == Guid.Empty ? EncodeInt64Guid(0xD1, r.TranscriptId) : gid;
 
             return new AdminTranscriptItemDto(
-                gid == Guid.Empty ? Guid.NewGuid() : gid,
+                id,
                 reqNo ?? string.Empty,
                 nm ?? "Student",
                 prn,

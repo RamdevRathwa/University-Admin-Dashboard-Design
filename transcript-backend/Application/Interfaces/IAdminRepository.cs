@@ -37,6 +37,7 @@ public interface IAdminRepository
     Task UpsertProgramAsync(Domain.Entities.Program program, CancellationToken ct = default);
 
     Task<IReadOnlyList<CurriculumVersion>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default);
+    Task<CurriculumVersion?> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
     Task AddCurriculumVersionAsync(CurriculumVersion version, CancellationToken ct = default);
     Task<bool> IsCurriculumVersionUsedAsync(Guid versionId, CancellationToken ct = default);
     Task<IReadOnlyList<CurriculumSubject>> ListCurriculumSubjectsAsync(Guid versionId, CancellationToken ct = default);
@@ -44,6 +45,7 @@ public interface IAdminRepository
     Task<Guid?> GetCurriculumVersionIdBySubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default);
     Task UpsertCurriculumSubjectAsync(Guid? curriculumSubjectId, Guid versionId, CurriculumSubject subject, CancellationToken ct = default);
     Task SoftDeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default);
+    Task<int> CloneCurriculumSubjectsAsync(Guid sourceVersionId, Guid targetVersionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<GradingScheme>> ListGradingSchemesAsync(CancellationToken ct = default);
     Task AddGradingSchemeAsync(GradingScheme scheme, CancellationToken ct = default);

@@ -15,6 +15,7 @@ import {
   Plus,
   Search,
   Trash2,
+  CopyPlus,
 } from "lucide-react";
 import PageHeader from "../../components/shell/PageHeader";
 import EmptyState from "../../components/shell/EmptyState";
@@ -84,6 +85,7 @@ export default function CurriculumSubjectsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [subjects, setSubjects] = useState([]);
+  const [versions, setVersions] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(defaultForm);
   const [semesterFilter, setSemesterFilter] = useState("1");
@@ -91,9 +93,18 @@ export default function CurriculumSubjectsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
   const [draggingId, setDraggingId] = useState("");
+  const [cloning, setCloning] = useState(false);
+  const [resolvedVersionInfo, setResolvedVersionInfo] = useState(location.state || {});
 
-  const versionInfo = location.state || {};
+  const versionInfo = resolvedVersionInfo;
   const locked = subjects.some((item) => item.locked);
+  const cloneSourceVersion = useMemo(() => {
+    const currentId = String(versionId || "");
+    return versions
+      .filter((version) => String(version.id || version.versionId || "") !== currentId)
+      .filter((version) => Number(version.subjectCount || 0) > 0)
+      .sort((a, b) => Number(b.versionNo || 0) - Number(a.versionNo || 0))[0];
+  }, [versionId, versions]);
 
   const loadSubjects = async () => {
     if (!versionId) return;
@@ -118,6 +129,38 @@ export default function CurriculumSubjectsPage() {
   useEffect(() => {
     loadSubjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [versionId]);
+
+  useEffect(() => {
+    const programId = versionInfo.programId;
+    if (!programId) return;
+    let alive = true;
+    adminService
+      .listCurriculumVersions(programId)
+      .then((res) => {
+        if (!alive) return;
+        const list = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
+        setVersions(list);
+      })
+      .catch(() => alive && setVersions([]));
+    return () => {
+      alive = false;
+    };
+  }, [versionInfo.programId]);
+
+  useEffect(() => {
+    if (!versionId) return;
+    let alive = true;
+    adminService
+      .getCurriculumVersion(versionId)
+      .then((info) => {
+        if (!alive) return;
+        setResolvedVersionInfo((current) => ({ ...current, ...info }));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, [versionId]);
 
   const semesterCounts = useMemo(() => {
@@ -247,6 +290,23 @@ export default function CurriculumSubjectsPage() {
     }
   };
 
+  const cloneFromEarlierVersion = async () => {
+    if (!versionId || !cloneSourceVersion?.id || locked || cloning) return;
+    const label = `${cloneSourceVersion.versionName || cloneSourceVersion.name || "earlier version"} (${cloneSourceVersion.academicYear || cloneSourceVersion.year || ""})`;
+    if (!window.confirm(`Clone all subjects from ${label.trim()} into this version? You can edit them after cloning.`)) return;
+
+    setCloning(true);
+    try {
+      const res = await adminService.cloneCurriculumSubjects(cloneSourceVersion.id || cloneSourceVersion.versionId, versionId);
+      toast({ title: "Subjects cloned", description: `${res?.copied ?? "Selected"} subjects copied into this version.` });
+      await loadSubjects();
+    } catch (e) {
+      toast({ title: "Could not clone subjects", description: e?.message || "The earlier version could not be cloned.", variant: "destructive" });
+    } finally {
+      setCloning(false);
+    }
+  };
+
   const reorderSemesterSubjects = async (sourceId, targetId) => {
     if (!sourceId || !targetId || sourceId === targetId || locked || !versionId) return;
     const currentRows = [...semesterSubjects];
@@ -278,7 +338,7 @@ export default function CurriculumSubjectsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        className="sticky top-4 z-20 rounded-3xl border border-gray-200/80 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85"
+        className="sticky top-4 z-20 rounded-3xl border border-gray-200/80 bg-white/95 backdrop-blur supports-backdrop-filter:bg-white/85"
         title="Manage Curriculum Subjects"
         description="Semester-wise subject mapping for this curriculum version."
         actions={
@@ -290,6 +350,16 @@ export default function CurriculumSubjectsPage() {
             <Button className="rounded-xl bg-[#1e40af] hover:bg-[#1e3a8a]" onClick={openCreate} disabled={locked}>
               <Plus className="mr-2 h-4 w-4" />
               Add Subject
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={cloneFromEarlierVersion}
+              disabled={locked || cloning || subjects.length > 0 || !cloneSourceVersion}
+              title={subjects.length > 0 ? "Clone is available only before adding subjects to this version." : "Clone subjects from an earlier version"}
+            >
+              <CopyPlus className="mr-2 h-4 w-4" />
+              {cloning ? "Cloning..." : "Clone Previous"}
             </Button>
           </div>
         }
@@ -315,7 +385,7 @@ export default function CurriculumSubjectsPage() {
           {overviewStats.map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.key} className="flex min-h-[92px] items-center gap-3 px-4 py-4 transition-colors hover:bg-slate-50/70">
+              <div key={item.key} className="flex min-h-23 items-center gap-3 px-4 py-4 transition-colors hover:bg-slate-50/70">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${item.iconWrap}`}>
                   <Icon className="h-5 w-5" />
                 </div>
@@ -397,7 +467,7 @@ export default function CurriculumSubjectsPage() {
                     <TableRow className="border-b border-gray-200 bg-white">
                       <TableHead className="w-12">#</TableHead>
                       <TableHead className="w-28">Code</TableHead>
-                      <TableHead className="min-w-[280px]">Subject</TableHead>
+                      <TableHead className="min-w-70">Subject</TableHead>
                       <TableHead className="w-40">Hours</TableHead>
                       <TableHead className="w-40">Credits</TableHead>
                       <TableHead className="w-44">Type</TableHead>
@@ -481,7 +551,7 @@ export default function CurriculumSubjectsPage() {
         </Card>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[760px] rounded-3xl">
+        <DialogContent className="sm:max-w-190 rounded-3xl">
           <DialogHeader><DialogTitle>{form.id ? "Edit Subject" : "Add Subject"}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">

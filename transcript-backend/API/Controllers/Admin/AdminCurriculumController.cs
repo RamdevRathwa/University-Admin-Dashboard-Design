@@ -33,6 +33,13 @@ public sealed class AdminCurriculumController : ControllerBase
         return Ok(new { items });
     }
 
+    [HttpGet("curriculum/versions/{id:guid}")]
+    public async Task<IActionResult> Version([FromRoute] Guid id, CancellationToken ct)
+    {
+        var item = await _admin.GetCurriculumVersionAsync(id, ct);
+        return Ok(item);
+    }
+
     [HttpPost("curriculum/versions")]
     public async Task<IActionResult> CreateVersion([FromQuery] Guid? programId, [FromBody] object body, CancellationToken ct)
     {
@@ -66,5 +73,18 @@ public sealed class AdminCurriculumController : ControllerBase
     {
         await _admin.DeleteCurriculumSubjectAsync(id, ct);
         return NoContent();
+    }
+
+    [HttpPost("curriculum/subjects/clone")]
+    public async Task<IActionResult> CloneSubjects([FromBody] CloneCurriculumSubjectsRequest body, CancellationToken ct)
+    {
+        var copied = await _admin.CloneCurriculumSubjectsAsync(body.SourceVersionId, body.TargetVersionId, ct);
+        return Ok(new { copied });
+    }
+
+    public sealed class CloneCurriculumSubjectsRequest
+    {
+        public Guid? SourceVersionId { get; set; }
+        public Guid? TargetVersionId { get; set; }
     }
 }

@@ -54,7 +54,7 @@ public sealed class OtpService : IOtpService
         if (sentLastHour >= _opt.MaxSendPerIdentifierPerHour)
             throw new AppException("Too many OTP requests. Please try again later.", 429, "rate_limited");
 
-        var code = GetOtpCode();
+        var code = GetOtpCode(isEmail);
         var salt = Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
         var hash = HashOtp(salt, id, purpose, code);
 
@@ -103,11 +103,16 @@ public sealed class OtpService : IOtpService
     {
         var id = NormalizeIdentifier(identifier);
         var code = (otp ?? string.Empty).Trim();
+        var isEmail = id.Contains('@');
         var devKeys = _opt.HashKey?.StartsWith("DEV_ONLY__", StringComparison.Ordinal) ?? false;
-        // Dev/testing bypass: accept FixedCode (or fallback 123456 when using DEV_ONLY keys).
-        var bypass = (_opt.FixedCode ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(bypass) && devKeys)
-            bypass = "123456";
+        // Dev/testing bypass is intentionally disabled for email OTPs.
+        var bypass = string.Empty;
+        if (!isEmail)
+        {
+            bypass = (_opt.FixedCode ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(bypass) && devKeys)
+                bypass = "123456";
+        }
 
         // If bypass is enabled and matches, skip length/hash checks but still require an active OTP record.
         if (!string.IsNullOrWhiteSpace(bypass) && code == bypass)
@@ -175,8 +180,10 @@ public sealed class OtpService : IOtpService
         return new string(chars);
     }
 
-    private string GetOtpCode()
+    private string GetOtpCode(bool isEmail)
     {
+        if (isEmail) return GenerateNumericOtp(_opt.Length);
+
         var fixedCode = (_opt.FixedCode ?? string.Empty).Trim();
         if (fixedCode.Length == _opt.Length && fixedCode.All(char.IsDigit)) return fixedCode;
         return GenerateNumericOtp(_opt.Length);

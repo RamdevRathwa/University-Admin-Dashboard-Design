@@ -95,8 +95,12 @@ builder.Services
             OnMessageReceived = context =>
             {
                 var path = context.HttpContext.Request.Path.Value ?? string.Empty;
-                if (path.StartsWith("/api/student/transcripts/", StringComparison.OrdinalIgnoreCase) &&
-                    path.EndsWith("/download", StringComparison.OrdinalIgnoreCase))
+                var isStudentDownload = path.StartsWith("/api/student/transcripts/", StringComparison.OrdinalIgnoreCase)
+                    && path.EndsWith("/download", StringComparison.OrdinalIgnoreCase);
+                var isAdminDownload = path.StartsWith("/api/admin/transcripts/", StringComparison.OrdinalIgnoreCase)
+                    && path.EndsWith("/download", StringComparison.OrdinalIgnoreCase);
+
+                if (isStudentDownload || isAdminDownload)
                 {
                     var tokenFromQuery = context.Request.Query["access_token"].FirstOrDefault();
                     if (!string.IsNullOrWhiteSpace(tokenFromQuery))

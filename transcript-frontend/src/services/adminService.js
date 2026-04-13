@@ -1,5 +1,11 @@
 import { apiRequest } from "./apiClient";
 
+function getAuthToken() {
+  const rememberAuth = localStorage.getItem("rememberAuth") === "true";
+  const storage = rememberAuth ? localStorage : sessionStorage;
+  return storage.getItem("authToken");
+}
+
 export const adminService = {
   getDashboardSummary: async () => apiRequest("/api/admin/dashboard/summary"),
   getRecentActivity: async ({ limit = 10 } = {}) => apiRequest(`/api/admin/audit/recent?limit=${encodeURIComponent(limit)}`),
@@ -29,6 +35,8 @@ export const adminService = {
   listPrograms: async () => apiRequest("/api/admin/programs"),
   listCurriculumVersions: async (programId) =>
     apiRequest(`/api/admin/curriculum/versions?programId=${encodeURIComponent(programId || "")}`),
+  getCurriculumVersion: async (versionId) =>
+    apiRequest(`/api/admin/curriculum/versions/${encodeURIComponent(versionId || "")}`),
   upsertProgram: async (body) => apiRequest("/api/admin/programs", { method: "POST", body }),
   createCurriculumVersion: async (programId, body) =>
     apiRequest(`/api/admin/curriculum/versions?programId=${encodeURIComponent(programId || "")}`, { method: "POST", body }),
@@ -40,6 +48,11 @@ export const adminService = {
     apiRequest(`/api/admin/curriculum/subjects/${encodeURIComponent(id)}?versionId=${encodeURIComponent(versionId || "")}`, { method: "PUT", body }),
   deleteCurriculumSubject: async (id) =>
     apiRequest(`/api/admin/curriculum/subjects/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  cloneCurriculumSubjects: async (sourceVersionId, targetVersionId) =>
+    apiRequest("/api/admin/curriculum/subjects/clone", {
+      method: "POST",
+      body: { sourceVersionId, targetVersionId },
+    }),
 
   listGradingSchemes: async () => apiRequest("/api/admin/grading/schemes"),
   upsertGradingScheme: async (body) => apiRequest("/api/admin/grading/schemes", { method: "POST", body }),
@@ -51,7 +64,17 @@ export const adminService = {
       )}&pageSize=${encodeURIComponent(pageSize)}`
     ),
   publishTranscript: async (id) => apiRequest(`/api/admin/transcripts/${encodeURIComponent(id)}/publish`, { method: "POST" }),
+  getTranscriptDownloadUrl: (id) => {
+    const transcriptId = String(id || "").trim();
+    if (!transcriptId) throw new Error("Transcript id is required");
 
+    const token = getAuthToken();
+    if (!token) throw new Error("Not authenticated");
+
+    const baseUrl = (import.meta.env?.VITE_API_BASE_URL ? String(import.meta.env.VITE_API_BASE_URL) : "").replace(/\/+$/, "");
+    const base = baseUrl || window.location.origin;
+    return `${base}/api/admin/transcripts/${encodeURIComponent(transcriptId)}/download?access_token=${encodeURIComponent(token)}`;
+  },
   listPayments: async ({ status = "", q = "", page = 1, pageSize = 10 } = {}) =>
     apiRequest(
       `/api/admin/payments?status=${encodeURIComponent(status)}&q=${encodeURIComponent(q)}&page=${encodeURIComponent(

@@ -15,12 +15,16 @@ public sealed class AdminService : IAdminService
 
     private readonly ICurrentUserService _current;
     private readonly IAdminRepository _repo;
+    private readonly ITranscriptRepository _transcripts;
+    private readonly ITranscriptPdfService _pdf;
     private readonly IUnitOfWork _uow;
 
-    public AdminService(ICurrentUserService current, IAdminRepository repo, IUnitOfWork uow)
+    public AdminService(ICurrentUserService current, IAdminRepository repo, ITranscriptRepository transcripts, ITranscriptPdfService pdf, IUnitOfWork uow)
     {
         _current = current;
         _repo = repo;
+        _transcripts = transcripts;
+        _pdf = pdf;
         _uow = uow;
     }
 
@@ -310,8 +314,29 @@ public sealed class AdminService : IAdminService
             versionName = v.VersionName,
             active = v.IsActive,
             locked = v.Locked,
-            subjectCount = 0
+            subjectCount = v.SubjectCount
         }).ToList();
+    }
+
+    public async Task<object> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        EnsureAdmin();
+        var version = await _repo.GetCurriculumVersionAsync(versionId, ct);
+        if (version is null) throw AppException.NotFound("Curriculum version not found.");
+
+        var program = await _repo.GetProgramAsync(version.ProgramId, ct);
+        return new
+        {
+            id = version.Id,
+            programId = version.ProgramId,
+            academicYear = version.AcademicYear,
+            versionName = version.VersionName,
+            active = version.IsActive,
+            locked = version.Locked,
+            subjectCount = version.SubjectCount,
+            programName = program?.Name,
+            programCode = program?.Code
+        };
     }
 
     public async Task CreateCurriculumVersionAsync(Guid? programId, object body, CancellationToken ct = default)
@@ -348,6 +373,7 @@ public sealed class AdminService : IAdminService
         if (!versionId.HasValue) throw new AppException("VersionId is required.", 400, "validation_error");
 
         var program = await _repo.GetProgramByCurriculumVersionAsync(versionId.Value, ct);
+        var version = await _repo.GetCurriculumVersionAsync(versionId.Value, ct);
         var items = await _repo.ListCurriculumSubjectsAsync(versionId.Value, ct);
         var locked = await _repo.IsCurriculumVersionUsedAsync(versionId.Value, ct);
 
@@ -370,6 +396,9 @@ public sealed class AdminService : IAdminService
             isElective = subject.IsElective,
             active = subject.IsActive,
             locked,
+            programId = version?.ProgramId,
+            academicYear = version?.AcademicYear,
+            versionName = version?.VersionName,
             programName = program?.Name,
             programCode = program?.Code
         }).ToList();
@@ -446,6 +475,26 @@ public sealed class AdminService : IAdminService
         await _uow.SaveChangesAsync(ct);
     }
 
+    public async Task<int> CloneCurriculumSubjectsAsync(Guid? sourceVersionId, Guid? targetVersionId, CancellationToken ct = default)
+    {
+        EnsureAdmin();
+        if (!sourceVersionId.HasValue) throw new AppException("Source version is required.", 400, "source_version_required");
+        if (!targetVersionId.HasValue) throw new AppException("Target version is required.", 400, "target_version_required");
+        if (sourceVersionId.Value == targetVersionId.Value) throw new AppException("Source and target versions must be different.", 400, "same_version");
+        if (await _repo.IsCurriculumVersionUsedAsync(targetVersionId.Value, ct))
+            throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
+
+        var copied = await _repo.CloneCurriculumSubjectsAsync(sourceVersionId.Value, targetVersionId.Value, ct);
+        await _repo.AddAuditAsync(NewAudit("CLONE", "CurriculumSubjects", targetVersionId.Value.ToString(), sourceVersionId.Value.ToString(), JsonSerializer.Serialize(new
+        {
+            sourceVersionId,
+            targetVersionId,
+            copied
+        })), ct);
+        await _uow.SaveChangesAsync(ct);
+        return copied;
+    }
+
     public async Task<IReadOnlyList<object>> ListGradingSchemesAsync(CancellationToken ct = default)
     {
         EnsureAdmin();
@@ -502,6 +551,24 @@ public sealed class AdminService : IAdminService
         t.PublishedBy = _current.UserId;
         await _repo.AddAuditAsync(NewAudit("PUBLISH", "Transcripts", t.Id.ToString(), null, JsonSerializer.Serialize(new { t.PublishedAt, t.PublishedBy })), ct);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task<(string path, string fileName)> GetTranscriptDownloadAsync(Guid id, CancellationToken ct = default)
+    {
+        EnsureAdmin();
+
+        var transcript = await _transcripts.GetByIdAsync(id, ct);
+        if (transcript is null) throw AppException.NotFound("Transcript not found.");
+        if (transcript.Locked != true) throw new AppException("Transcript is not available for download.", 400, "not_ready");
+
+        var (pdfPath, _) = await _pdf.GeneratePdfAsync(transcript.Id, CancellationToken.None);
+        transcript.PdfPath = pdfPath;
+        if (string.IsNullOrWhiteSpace(transcript.PdfPath)) throw new AppException("Transcript PDF is missing.", 500, "pdf_missing");
+
+        await _repo.AddAuditAsync(NewAudit("DOWNLOAD", "Transcripts", transcript.Id.ToString(), null, JsonSerializer.Serialize(new { transcript.PdfPath })), ct);
+        await _uow.SaveChangesAsync(ct);
+
+        return (transcript.PdfPath, $"Transcript_{transcript.Id:N}.pdf");
     }
 
     public Task<PagedResultDto<object>> ListPaymentsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)

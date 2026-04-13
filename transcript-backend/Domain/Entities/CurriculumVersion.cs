@@ -9,6 +9,6 @@ public sealed class CurriculumVersion
     public string VersionName { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public bool Locked { get; set; } = false;
+    public int SubjectCount { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
-

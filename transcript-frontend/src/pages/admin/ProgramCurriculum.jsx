@@ -25,6 +25,9 @@ export default function ProgramCurriculum() {
   const [programs, setPrograms] = useState([]);
   const [programId, setProgramId] = useState("");
   const [versions, setVersions] = useState([]);
+  const [faculties, setFaculties] = useState([]);
+  const [facultyId, setFacultyId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
   const [departments, setDepartments] = useState([]);
   const [gradingSchemes, setGradingSchemes] = useState([]);
 
@@ -50,6 +53,16 @@ export default function ProgramCurriculum() {
     return map;
   }, [departments]);
 
+  const filteredDepartments = useMemo(() => {
+    if (!facultyId) return departments;
+    return departments.filter((department) => String(department.facultyId || department.faculty_id || "") === String(facultyId));
+  }, [departments, facultyId]);
+
+  const filteredPrograms = useMemo(() => {
+    if (!departmentId) return programs;
+    return programs.filter((program) => String(program.departmentId || program.department_id || "") === String(departmentId));
+  }, [programs, departmentId]);
+
   const loadPrograms = async () => {
     setLoading(true);
     setError("");
@@ -57,7 +70,6 @@ export default function ProgramCurriculum() {
       const res = await adminService.listPrograms();
       const list = Array.isArray(res?.items) ? res.items : Array.isArray(res?.programs) ? res.programs : Array.isArray(res) ? res : [];
       setPrograms(list);
-      if (!programId && list[0]) setProgramId(String(list[0].id || list[0].programId));
     } catch (e) {
       setError(e?.message || "Failed to load programs.");
       setPrograms([]);
@@ -68,11 +80,14 @@ export default function ProgramCurriculum() {
 
   const loadProgramLookups = async () => {
     try {
-      const [departmentRes, gradingRes] = await Promise.all([adminService.listDepartments(""), adminService.listGradingSchemes()]);
+      const [facultyRes, departmentRes, gradingRes] = await Promise.all([adminService.listFaculties(), adminService.listDepartments(""), adminService.listGradingSchemes()]);
+      const facultyList = Array.isArray(facultyRes?.items) ? facultyRes.items : Array.isArray(facultyRes) ? facultyRes : [];
       const departmentList = Array.isArray(departmentRes?.items) ? departmentRes.items : Array.isArray(departmentRes) ? departmentRes : [];
       const gradingList = Array.isArray(gradingRes?.items) ? gradingRes.items : Array.isArray(gradingRes) ? gradingRes : [];
+      setFaculties(facultyList);
       setDepartments(departmentList);
       setGradingSchemes(gradingList);
+      setFacultyId((current) => current || String(facultyList[0]?.id || facultyList[0]?.facultyId || ""));
       setNewProgram((prev) => ({
         ...prev,
         departmentId: prev.departmentId || String(departmentList[0]?.id || departmentList[0]?.departmentId || ""),
@@ -105,6 +120,39 @@ export default function ProgramCurriculum() {
     loadProgramLookups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const firstDepartment = filteredDepartments[0];
+    if (!firstDepartment) {
+      setDepartmentId("");
+      setNewProgram((prev) => ({ ...prev, departmentId: "" }));
+      setProgramId("");
+      return;
+    }
+
+    const currentDepartmentExists = filteredDepartments.some((department) => String(department.id || department.departmentId || "") === String(departmentId));
+    if (!currentDepartmentExists) {
+      setDepartmentId(String(firstDepartment.id || firstDepartment.departmentId || ""));
+    }
+
+    const currentNewProgramDepartmentExists = filteredDepartments.some((department) => String(department.id || department.departmentId || "") === String(newProgram.departmentId));
+    if (!currentNewProgramDepartmentExists) {
+      setNewProgram((prev) => ({ ...prev, departmentId: String(firstDepartment.id || firstDepartment.departmentId || "") }));
+    }
+  }, [filteredDepartments, departmentId, newProgram.departmentId]);
+
+  useEffect(() => {
+    const firstProgram = filteredPrograms[0];
+    if (!firstProgram) {
+      setProgramId("");
+      return;
+    }
+
+    const currentProgramExists = filteredPrograms.some((program) => String(program.id || program.programId || "") === String(programId));
+    if (!currentProgramExists) {
+      setProgramId(String(firstProgram.id || firstProgram.programId || ""));
+    }
+  }, [filteredPrograms, programId]);
 
   useEffect(() => {
     loadVersions(programId);
@@ -175,15 +223,49 @@ export default function ProgramCurriculum() {
 
             <TabsContent value="versions" className="space-y-4">
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-                <div className="lg:col-span-5">
+                <div className="lg:col-span-3">
+                  <Label>Faculty</Label>
+                  <div className="mt-1">
+                    <Select value={facultyId || ""} onValueChange={setFacultyId}>
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Select faculty" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {faculties.map((faculty) => (
+                          <SelectItem key={String(faculty.id || faculty.facultyId)} value={String(faculty.id || faculty.facultyId)}>
+                            {faculty.name || faculty.facultyName || faculty.code || "Faculty"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="lg:col-span-3">
+                  <Label>Department</Label>
+                  <div className="mt-1">
+                    <Select value={departmentId || ""} onValueChange={setDepartmentId} disabled={!facultyId || filteredDepartments.length === 0}>
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredDepartments.map((department) => (
+                          <SelectItem key={String(department.id || department.departmentId)} value={String(department.id || department.departmentId)}>
+                            {department.name || department.deptName || department.code || "Department"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="lg:col-span-3">
                   <Label>Program</Label>
                   <div className="mt-1">
-                    <Select value={programId || ""} onValueChange={setProgramId}>
+                    <Select value={programId || ""} onValueChange={setProgramId} disabled={!departmentId || filteredPrograms.length === 0}>
                       <SelectTrigger className="rounded-xl">
                         <SelectValue placeholder="Select program" />
                       </SelectTrigger>
                       <SelectContent>
-                        {programs.map((program) => (
+                        {filteredPrograms.map((program) => (
                           <SelectItem key={String(program.id || program.programId)} value={String(program.id || program.programId)}>
                             {program.name || program.programName || program.program_code || program.code || "Program"}
                           </SelectItem>
@@ -192,7 +274,7 @@ export default function ProgramCurriculum() {
                     </Select>
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 lg:col-span-7">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 lg:col-span-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-gray-900">
                       {programMap.get(String(programId || ""))?.name || programMap.get(String(programId || ""))?.programName || "-"}
@@ -277,6 +359,7 @@ export default function ProgramCurriculum() {
                                     programCode: programMap.get(String(programId || ""))?.code || programMap.get(String(programId || ""))?.programCode || "",
                                     versionName: version.versionName || version.name || "",
                                     academicYear: version.academicYear || version.year || "",
+                                    programId,
                                   },
                                 })
                               }
@@ -299,13 +382,28 @@ export default function ProgramCurriculum() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-3 lg:grid-cols-12">
                   <div className="space-y-1 lg:col-span-3">
+                    <Label>Faculty</Label>
+                    <Select value={facultyId || ""} onValueChange={setFacultyId}>
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Select faculty" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {faculties.map((faculty) => (
+                          <SelectItem key={String(faculty.id || faculty.facultyId)} value={String(faculty.id || faculty.facultyId)}>
+                            {faculty.name || faculty.facultyName || faculty.code || "Faculty"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 lg:col-span-3">
                     <Label>Department</Label>
                     <Select value={newProgram.departmentId || ""} onValueChange={(value) => setNewProgram((prev) => ({ ...prev, departmentId: value }))}>
                       <SelectTrigger className="rounded-xl">
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        {departments.map((department) => (
+                        {filteredDepartments.map((department) => (
                           <SelectItem key={String(department.id || department.departmentId)} value={String(department.id || department.departmentId)}>
                             {department.name || department.deptName || department.code || "Department"}
                           </SelectItem>

@@ -10,14 +10,21 @@ namespace Infrastructure.Repositories;
 public sealed class TranscriptRepository : ITranscriptRepository
 {
     private readonly V2DbContext _db;
+    private const byte InternalTranscriptGuidPrefix = 0xD1;
     public TranscriptRepository(V2DbContext db) => _db = db;
 
     public async Task<Transcript?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var map = await _db.MapTranscripts.AsNoTracking().FirstOrDefaultAsync(x => x.LegacyTranscriptGuid == id, ct);
-        if (map is null) return null;
+        long? transcriptId = map?.TranscriptId;
 
-        var row = await _db.Transcripts.AsNoTracking().FirstOrDefaultAsync(x => x.TranscriptId == map.TranscriptId, ct);
+        if (!transcriptId.HasValue)
+        {
+            transcriptId = DecodeInternalTranscriptGuid(id);
+            if (!transcriptId.HasValue) return null;
+        }
+
+        var row = await _db.Transcripts.AsNoTracking().FirstOrDefaultAsync(x => x.TranscriptId == transcriptId.Value, ct);
         if (row is null) return null;
 
         var legacyRequest = await _db.MapRequests.AsNoTracking()
@@ -189,7 +196,16 @@ public sealed class TranscriptRepository : ITranscriptRepository
             .Select(s => s.ProgramId)
             .Where(pid => pid.HasValue)
             .Select(pid => pid!.Value)
-            .SelectMany(pid => _db.CurriculumVersions.AsNoTracking().Where(cv => cv.ProgramId == pid).OrderByDescending(cv => cv.IsPublished).ThenByDescending(cv => cv.AcademicYearId).ThenByDescending(cv => cv.VersionNo).Select(cv => cv.CurriculumVersionId).Take(1))
+            .SelectMany(pid =>
+                from cv in _db.CurriculumVersions.AsNoTracking()
+                where cv.ProgramId == pid
+                let activeSubjectCount = _db.CurriculumSubjects.Count(cs =>
+                    cs.CurriculumVersionId == cv.CurriculumVersionId && cs.IsActive)
+                orderby activeSubjectCount > 0 descending,
+                    cv.IsPublished descending,
+                    cv.AcademicYearId descending,
+                    cv.VersionNo descending
+                select cv.CurriculumVersionId)
             .FirstOrDefaultAsync(ct);
 
         if (cvId == 0) cvId = await _db.CurriculumVersions.AsNoTracking().Select(x => x.CurriculumVersionId).FirstAsync(ct);
@@ -584,5 +600,12 @@ public sealed class TranscriptRepository : ITranscriptRepository
     {
         try { return Convert.FromBase64String(s); }
         catch { return Array.Empty<byte>(); }
+    }
+
+    private static long? DecodeInternalTranscriptGuid(Guid value)
+    {
+        var bytes = value.ToByteArray();
+        if (bytes.Length < 9 || bytes[0] != InternalTranscriptGuidPrefix) return null;
+        return BitConverter.ToInt64(bytes, 1);
     }
 }

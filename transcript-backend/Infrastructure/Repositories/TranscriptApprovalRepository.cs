@@ -35,7 +35,7 @@ public sealed class TranscriptApprovalRepository : ITranscriptApprovalRepository
         ApprovalAction.Forward => "Forward",
         ApprovalAction.Approve => "Approve",
         ApprovalAction.Reject => "Reject",
+        ApprovalAction.Return => "Return",
         _ => a.ToString()
     };
 }
-

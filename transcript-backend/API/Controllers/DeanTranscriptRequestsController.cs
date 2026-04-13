@@ -73,7 +73,7 @@ public sealed class DeanTranscriptRequestsController : ControllerBase
             join u in _db.Users.AsNoTracking() on s.UserId equals u.UserId
             join p in _db.Programs.AsNoTracking() on s.ProgramId equals p.ProgramId into pj
             from p in pj.DefaultIfEmpty()
-            where a.RoleId == (short)UserRole.Dean && (a.ActionCode == "Reject" || a.ActionCode == "Forward")
+            where a.RoleId == (short)UserRole.Dean && (a.ActionCode == "Reject" || a.ActionCode == "Return" || a.ActionCode == "Forward")
             orderby a.ActedAt descending
             select new
             {

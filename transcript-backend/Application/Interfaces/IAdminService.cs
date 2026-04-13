@@ -26,15 +26,18 @@ public interface IAdminService
     Task UpsertProgramAsync(object body, CancellationToken ct = default);
     Task<IReadOnlyList<object>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default);
     Task CreateCurriculumVersionAsync(Guid? programId, object body, CancellationToken ct = default);
+    Task<object> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
     Task<IReadOnlyList<object>> ListCurriculumSubjectsAsync(Guid? versionId, CancellationToken ct = default);
     Task UpsertCurriculumSubjectAsync(Guid? versionId, Guid? curriculumSubjectId, object body, CancellationToken ct = default);
     Task DeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default);
+    Task<int> CloneCurriculumSubjectsAsync(Guid? sourceVersionId, Guid? targetVersionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<object>> ListGradingSchemesAsync(CancellationToken ct = default);
     Task UpsertGradingSchemeAsync(object body, CancellationToken ct = default);
 
     Task<PagedResultDto<AdminTranscriptItemDto>> ListTranscriptsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default);
     Task PublishTranscriptAsync(Guid id, CancellationToken ct = default);
+    Task<(string path, string fileName)> GetTranscriptDownloadAsync(Guid id, CancellationToken ct = default);
 
     Task<PagedResultDto<object>> ListPaymentsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default);
     Task<PagedResultDto<object>> ListAuditAsync(string? q, string? action, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default);

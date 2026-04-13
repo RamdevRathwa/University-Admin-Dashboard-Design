@@ -274,7 +274,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
             Role = UserRole.Dean,
             ApprovedBy = _current.UserId,
             Remarks = r,
-            Action = ApprovalAction.Forward,
+            Action = ApprovalAction.Return,
             ActionAt = DateTimeOffset.UtcNow
         }, ct);
 

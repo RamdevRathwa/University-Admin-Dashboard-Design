@@ -5,7 +5,6 @@ import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
 import { Alert } from "../../components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../components/ui/dialog";
-import ApprovalTimeline from "../../components/approvals/ApprovalTimeline";
 import StatusBadge from "../../components/approvals/StatusBadge";
 import SemesterTranscriptTable from "../../components/clerk/grade-entry/SemesterTranscriptTable";
 import { apiRequest } from "../../services/apiClient";
@@ -107,8 +106,6 @@ export default function DeanReviewPage() {
         </div>
       </div>
 
-      <ApprovalTimeline currentStage="Dean" />
-
       {error ? <Alert variant="destructive">{error}</Alert> : null}
 
       <Card>
@@ -149,6 +146,7 @@ export default function DeanReviewPage() {
                 creditPointScheme={sem.creditPointScheme}
                 subjects={sem.subjects}
                 grades={grades}
+                semesterSummary={sem.summary || sem.semesterSummary || sem.Summary}
                 setGrade={() => {}}
                 active={null}
                 setActive={() => {}}
