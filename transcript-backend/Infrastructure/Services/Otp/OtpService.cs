@@ -105,14 +105,11 @@ public sealed class OtpService : IOtpService
         var code = (otp ?? string.Empty).Trim();
         var isEmail = id.Contains('@');
         var devKeys = _opt.HashKey?.StartsWith("DEV_ONLY__", StringComparison.Ordinal) ?? false;
-        // Dev/testing bypass is intentionally disabled for email OTPs.
+        // Dev/testing bypass enabled for both email and mobile OTPs.
         var bypass = string.Empty;
-        if (!isEmail)
-        {
-            bypass = (_opt.FixedCode ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(bypass) && devKeys)
-                bypass = "123456";
-        }
+        bypass = (_opt.FixedCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(bypass) && devKeys)
+            bypass = "123456";
 
         // If bypass is enabled and matches, skip length/hash checks but still require an active OTP record.
         if (!string.IsNullOrWhiteSpace(bypass) && code == bypass)
