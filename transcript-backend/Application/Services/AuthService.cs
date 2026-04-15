@@ -4,20 +4,25 @@ using Application.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Interfaces;
+using System.Text.Json;
 
 namespace Application.Services;
 
 public sealed class AuthService : IAuthService
 {
+    private const string RolePermsKey = "role_permissions";
+
     private readonly IUserRepository _users;
+    private readonly IAdminRepository _admin;
     private readonly IOtpService _otp;
     private readonly IJwtService _jwt;
     private readonly IAuditTrailService _audit;
     private readonly IUnitOfWork _uow;
 
-    public AuthService(IUserRepository users, IOtpService otp, IJwtService jwt, IAuditTrailService audit, IUnitOfWork uow)
+    public AuthService(IUserRepository users, IAdminRepository admin, IOtpService otp, IJwtService jwt, IAuditTrailService audit, IUnitOfWork uow)
     {
         _users = users;
+        _admin = admin;
         _otp = otp;
         _jwt = jwt;
         _audit = audit;
@@ -72,7 +77,8 @@ public sealed class AuthService : IAuthService
             ct);
 
         var token = _jwt.GenerateToken(user);
-        return new AuthResponseDto(token, MapUser(user));
+        var permissions = await GetPermissionsForRoleAsync(user.Role, ct);
+        return new AuthResponseDto(token, MapUser(user, permissions));
     }
 
     public async Task RequestLoginOtpAsync(LoginRequestOtpDto dto, CancellationToken ct = default)
@@ -124,11 +130,37 @@ public sealed class AuthService : IAuthService
             ct);
 
         var token = _jwt.GenerateToken(user);
-        return new AuthResponseDto(token, MapUser(user));
+        var permissions = await GetPermissionsForRoleAsync(user.Role, ct);
+        return new AuthResponseDto(token, MapUser(user, permissions));
     }
 
-    private static UserDto MapUser(User u) =>
-        new(u.Id, u.FullName, u.Email, u.Mobile, u.Role, u.IsEmailVerified, u.IsMobileVerified, u.CreatedAt);
+    private static UserDto MapUser(User u, IReadOnlyList<string> permissions) =>
+        new(u.Id, u.FullName, u.Email, u.Mobile, u.Role, u.IsEmailVerified, u.IsMobileVerified, u.CreatedAt, permissions);
+
+    private async Task<IReadOnlyList<string>> GetPermissionsForRoleAsync(UserRole role, CancellationToken ct)
+    {
+        var setting = await _admin.GetSettingAsync(RolePermsKey, ct);
+        if (setting is null || string.IsNullOrWhiteSpace(setting.SettingValue)) return Array.Empty<string>();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string[]>>(setting.SettingValue);
+            if (parsed is null) return Array.Empty<string>();
+
+            return parsed.TryGetValue(role.ToString(), out var keys)
+                ? (keys ?? Array.Empty<string>())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                : Array.Empty<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
 
     private static string NormalizeEmail(string email) => (email ?? string.Empty).Trim().ToLowerInvariant();
     private static string NormalizeMobile(string mobile) => new string((mobile ?? string.Empty).Where(char.IsDigit).ToArray());

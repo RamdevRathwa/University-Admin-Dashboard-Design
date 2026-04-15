@@ -6,7 +6,7 @@ namespace API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/audit")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class AdminAuditController : ControllerBase
 {
     private readonly IAdminService _admin;

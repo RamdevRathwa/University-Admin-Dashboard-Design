@@ -48,6 +48,9 @@ export default function TranscriptRequest() {
 
   const [step, setStep] = useState("academic"); // academic | personal | marksheets | identity
   const [submitting, setSubmitting] = useState(false);
+  const [draftRequestId, setDraftRequestId] = useState("");
+  const [savingSemesters, setSavingSemesters] = useState({});
+  const [savedMarksheetsBySemester, setSavedMarksheetsBySemester] = useState({});
 
   const [errors, setErrors] = useState({});
 
@@ -105,6 +108,158 @@ export default function TranscriptRequest() {
     [selectedProgramDuration]
   );
 
+  const draftRequestStorageKey = `${draftStorageKey}:requestId`;
+
+  const getSemesterFromName = (name) => {
+    const match = /^semester\s+(\d+)\s*-/i.exec(String(name || "").trim());
+    return match ? Number(match[1]) : null;
+  };
+
+  const mapSavedMarksheetDocs = (docs) => {
+    const next = {};
+    (docs || [])
+      .filter((d) => String(d?.type || d?.documentType || "").toLowerCase() === "marksheet")
+      .forEach((d) => {
+        const id = d?.id || d?.Id || "";
+        const fileName = d?.fileName || "";
+        const status = String(d?.status || "");
+        const semester = getSemesterFromName(fileName);
+        if (!semester) return;
+
+        const uploadedAt = d?.uploadedAt || null;
+        const prev = next[semester];
+        if (!prev || (uploadedAt && prev.uploadedAt && new Date(uploadedAt).getTime() > new Date(prev.uploadedAt).getTime()) || (!prev.uploadedAt && uploadedAt)) {
+          next[semester] = { id, fileName, uploadedAt, status };
+        }
+      });
+    return next;
+  };
+
+  const getMarksheetStatusMeta = (file, isSaving) => {
+    if (isSaving) return { label: "Uploading", variant: "warning" };
+    if (!file) return { label: "Not Uploaded", variant: "neutral" };
+    if (file instanceof File) return { label: "Selected", variant: "default" };
+
+    const rawStatus = String(file?.status || "").toLowerCase();
+    if (rawStatus === "returned") return { label: "Returned", variant: "destructive" };
+    if (rawStatus === "approved") return { label: "Verified", variant: "success" };
+
+    // Newly uploaded marksheets are persisted as Pending on the backend.
+    return { label: "Uploaded", variant: "success" };
+  };
+
+  const getPersistedMarksheet = (semester) => documents.marksheetsBySemester?.[semester] || savedMarksheetsBySemester?.[semester] || null;
+
+  const downloadPersistedFile = async (doc, fallbackName) => {
+    if (!doc?.id) return;
+
+    const { blob, fileName } = await studentDocumentsService.download(doc.id);
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = fileName || fallbackName || doc.fileName || "document";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60000);
+  };
+
+  const openPersistedFile = async (doc) => {
+    if (!doc?.id) return;
+
+    const { blob } = await studentDocumentsService.download(doc.id);
+    const objectUrl = window.URL.createObjectURL(blob);
+    const win = window.open(objectUrl, "_blank", "noopener,noreferrer");
+    if (!win) {
+      toast({ title: "Unable to open file", description: "Please allow pop-ups for this site to view uploaded files." });
+    }
+    window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60000);
+  };
+
+  const refreshSavedMarksheets = async (requestId) => {
+    if (!requestId) {
+      setSavedMarksheetsBySemester({});
+      return;
+    }
+    try {
+      const docs = await studentDocumentsService.list(requestId);
+      setSavedMarksheetsBySemester(mapSavedMarksheetDocs(docs));
+    } catch {
+      // ignore list failures here; upload response remains source of truth for immediate feedback
+    }
+  };
+
+  const ensureWorkingRequestId = async () => {
+    if (draftRequestId) return draftRequestId;
+
+    try {
+      const stored = window.localStorage.getItem(draftRequestStorageKey);
+      if (stored) {
+        setDraftRequestId(stored);
+        return stored;
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    const draft = await transcriptService.createDraft();
+    const id = draft?.id || draft?.Id;
+    if (!id) throw new Error("Unable to create draft request.");
+
+    setDraftRequestId(id);
+    try {
+      window.localStorage.setItem(draftRequestStorageKey, id);
+    } catch {
+      // ignore storage errors
+    }
+
+    return id;
+  };
+
+  const uploadSemesterMarksheet = async (semester, file) => {
+    if (!file) {
+      setSavedMarksheetsBySemester((prev) => {
+        const next = { ...prev };
+        delete next[semester];
+        return next;
+      });
+      return;
+    }
+
+    if (!isAllowedFile(file)) {
+      setErrors((prev) => ({ ...prev, [`semester-${semester}`]: `Semester ${semester} marksheet must be PDF, JPG, JPEG, or PNG` }));
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setErrors((prev) => ({ ...prev, [`semester-${semester}`]: `Semester ${semester} marksheet must be 20 MB or smaller` }));
+      return;
+    }
+
+    setSavingSemesters((prev) => ({ ...prev, [semester]: true }));
+    setSavedMarksheetsBySemester((prev) => {
+      const next = { ...prev };
+      delete next[semester];
+      return next;
+    });
+
+    try {
+      const requestId = await ensureWorkingRequestId();
+      const tagged = new File([file], `Semester ${semester} - ${file.name}`, {
+        type: file.type || "application/octet-stream",
+        lastModified: file.lastModified || Date.now(),
+      });
+      await studentDocumentsService.upload(requestId, "Marksheet", [tagged]);
+      await refreshSavedMarksheets(requestId);
+      setErrors((prev) => ({ ...prev, [`semester-${semester}`]: null }));
+      toast({ title: `Semester ${semester} saved`, description: "Marksheet uploaded successfully." });
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [`semester-${semester}`]: err?.message || `Failed to save Semester ${semester} marksheet` }));
+    } finally {
+      setSavingSemesters((prev) => ({ ...prev, [semester]: false }));
+    }
+  };
+
   useEffect(() => {
     setDocuments((prev) => {
       if (!semesterNumbers.length) {
@@ -121,6 +276,19 @@ export default function TranscriptRequest() {
       return { ...prev, marksheetsBySemester: next };
     });
   }, [semesterNumbers]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(draftRequestStorageKey);
+      if (stored) setDraftRequestId(stored);
+    } catch {
+      // ignore storage errors
+    }
+  }, [draftRequestStorageKey]);
+
+  useEffect(() => {
+    refreshSavedMarksheets(draftRequestId);
+  }, [draftRequestId]);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -189,12 +357,12 @@ export default function TranscriptRequest() {
 
   const documentCompletion = useMemo(() => {
     const checks = [
-      semesterNumbers.length > 0 && semesterNumbers.every((semester) => !!documents.marksheetsBySemester?.[semester]),
+      semesterNumbers.length > 0 && semesterNumbers.every((semester) => !!getPersistedMarksheet(semester)),
       !!documents.govtId,
       authorizeRepresentative === "no" || !!documents.authorityLetter,
     ];
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [authorizeRepresentative, documents, semesterNumbers]);
+  }, [authorizeRepresentative, documents.govtId, documents.authorityLetter, documents.marksheetsBySemester, semesterNumbers, savedMarksheetsBySemester]);
 
   const overallCompletion = useMemo(() => {
     return Math.round((academicCompletion + personalCompletion + documentCompletion) / 3);
@@ -224,7 +392,7 @@ export default function TranscriptRequest() {
         label: "Semester Marksheet Uploads",
         description: "Upload one marksheet for each semester in your program.",
         percent: semesterNumbers.length
-          ? Math.round((semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester]).length / semesterNumbers.length) * 100)
+          ? Math.round((semesterNumbers.filter((semester) => !!getPersistedMarksheet(semester)).length / semesterNumbers.length) * 100)
           : 0,
         icon: FileCheck2,
       },
@@ -237,7 +405,7 @@ export default function TranscriptRequest() {
         icon: FileCheck2,
       },
     ],
-    [academicCompletion, personalCompletion, documentCompletion, documents.marksheetsBySemester, semesterNumbers]
+    [academicCompletion, personalCompletion, documentCompletion, documents.marksheetsBySemester, savedMarksheetsBySemester, semesterNumbers]
   );
 
   const currentStepIndex = steps.findIndex((item) => item.key === step);
@@ -430,6 +598,30 @@ export default function TranscriptRequest() {
     }));
     const key = `semester-${semester}`;
     if (errors[key]) setErrors((p) => ({ ...p, [key]: null }));
+
+    uploadSemesterMarksheet(semester, file);
+  };
+
+  const openLocalFile = (file) => {
+    if (!file) return;
+    const objectUrl = window.URL.createObjectURL(file);
+    const win = window.open(objectUrl, "_blank", "noopener,noreferrer");
+    if (!win) {
+      toast({ title: "Unable to open file", description: "Please allow pop-ups for this site to view selected files." });
+    }
+    window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60000);
+  };
+
+  const downloadLocalFile = (file, fallbackName) => {
+    if (!file) return;
+    const objectUrl = window.URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = file.name || fallbackName || "marksheet";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
   };
 
   const getStepErrors = (s) => {
@@ -469,6 +661,8 @@ export default function TranscriptRequest() {
         if (!file) next[`semester-${semester}`] = `Upload Semester ${semester} marksheet`;
         else if (!isAllowedFile(file)) next[`semester-${semester}`] = `Semester ${semester} marksheet must be PDF, JPG, JPEG, or PNG`;
         else if (file.size > MAX_FILE_SIZE) next[`semester-${semester}`] = `Semester ${semester} marksheet must be 20 MB or smaller`;
+        else if (savingSemesters?.[semester]) next[`semester-${semester}`] = `Semester ${semester} marksheet is still saving. Please wait.`;
+        else if (!savedMarksheetsBySemester?.[semester]) next[`semester-${semester}`] = `Semester ${semester} marksheet is selected but not saved yet`;
       });
     }
     if (s === "identity") {
@@ -546,21 +740,21 @@ export default function TranscriptRequest() {
       const dto = buildProfileDto();
 
       await studentProfileService.upsertMyProfile(dto);
-      const draft = await transcriptService.createDraft();
-      const requestId = draft?.id || draft?.Id;
+      const requestId = await ensureWorkingRequestId();
 
-      const marksheetFiles = semesterNumbers
-        .map((semester) => {
-          const file = documents.marksheetsBySemester?.[semester];
-          if (!file) return null;
-          return new File([file], `Semester ${semester} - ${file.name}`, {
-            type: file.type || "application/octet-stream",
-            lastModified: file.lastModified || Date.now(),
-          });
-        })
-        .filter(Boolean);
+      const unsavedSemesters = semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester] && !savedMarksheetsBySemester?.[semester]);
+      for (const semester of unsavedSemesters) {
+        await uploadSemesterMarksheet(semester, documents.marksheetsBySemester?.[semester]);
+      }
 
-      await studentDocumentsService.upload(requestId, "Marksheet", marksheetFiles);
+      const marksheetErrors = getStepErrors("marksheets");
+      if (Object.keys(marksheetErrors).length) {
+        setErrors(marksheetErrors);
+        setStep("marksheets");
+        setSubmitting(false);
+        return;
+      }
+
       await studentDocumentsService.upload(requestId, "GovernmentId", documents.govtId ? [documents.govtId] : []);
       if (authorizeRepresentative === "yes" && documents.authorityLetter) {
         await studentDocumentsService.upload(requestId, "AuthorityLetter", [documents.authorityLetter]);
@@ -570,9 +764,13 @@ export default function TranscriptRequest() {
 
       try {
         window.localStorage.removeItem(draftStorageKey);
+        window.localStorage.removeItem(draftRequestStorageKey);
       } catch {
         // ignore storage errors
       }
+
+      setDraftRequestId("");
+      setSavedMarksheetsBySemester({});
 
       toast({ title: "Request submitted", description: `Reference ID: ${submitted?.id || submitted?.Id}` });
     } catch (err) {
@@ -874,7 +1072,7 @@ export default function TranscriptRequest() {
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-white p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Selected</p>
-                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester]).length}</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.filter((semester) => !!getPersistedMarksheet(semester)).length}</p>
                       <p className="mt-1 text-sm text-gray-500">semester files chosen</p>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -887,14 +1085,53 @@ export default function TranscriptRequest() {
                   <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5">
                     {semesterNumbers.length ? (
                       semesterNumbers.map((semester) => {
-                        const file = documents.marksheetsBySemester?.[semester] || null;
+                        const file = getPersistedMarksheet(semester);
                         const errorKey = `semester-${semester}`;
+                        const fileName = file?.name || file?.fileName || null;
+                        const isLocalFile = file instanceof File;
+                        const statusMeta = getMarksheetStatusMeta(file, !!savingSemesters[semester]);
 
                         return (
                           <div key={semester} className="space-y-2 rounded-xl border border-gray-200 p-4">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <Label htmlFor={`semester-${semester}`}>Semester {semester} Marksheet</Label>
-                              <p className="text-xs text-gray-500">{file ? file.name : "No file selected"}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                                <p className="text-xs text-gray-500">{fileName || "No file selected"}</p>
+                                {file ? (
+                                  <>
+                                    {isLocalFile ? (
+                                      <>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => openLocalFile(file)}>
+                                          View
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => downloadLocalFile(file, `Semester-${semester}-marksheet`)}
+                                        >
+                                          Download
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Button type="button" variant="outline" size="sm" onClick={() => openPersistedFile(file)}>
+                                          View
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => downloadPersistedFile(file, `Semester-${semester}-marksheet`)}
+                                        >
+                                          Download
+                                        </Button>
+                                      </>
+                                    )}
+                                  </>
+                                ) : null}
+                              </div>
                             </div>
                             <Input
                               id={`semester-${semester}`}
@@ -926,7 +1163,7 @@ export default function TranscriptRequest() {
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-xl border border-gray-200 bg-white p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Marksheets</p>
-                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.filter((semester) => !!documents.marksheetsBySemester?.[semester]).length}</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{semesterNumbers.filter((semester) => !!getPersistedMarksheet(semester)).length}</p>
                       <p className="mt-1 text-sm text-gray-500">semester files selected</p>
                     </div>
                     <div className="rounded-xl border border-gray-200 bg-white p-4">

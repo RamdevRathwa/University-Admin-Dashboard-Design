@@ -6,7 +6,7 @@ namespace API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/grading")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class AdminGradingController : ControllerBase
 {
     private readonly IAdminService _admin;

@@ -3,6 +3,7 @@ using Application.Interfaces;
 using Domain.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace API.Controllers;
 
@@ -10,13 +11,17 @@ namespace API.Controllers;
 [Route("api/[controller]")]
 public sealed class AuthController : ControllerBase
 {
+    private const string RolePermsKey = "role_permissions";
+
     private readonly IAuthService _auth;
+    private readonly IAdminRepository _admin;
     private readonly IUserRepository _users;
     private readonly ICurrentUserService _current;
 
-    public AuthController(IAuthService auth, IUserRepository users, ICurrentUserService current)
+    public AuthController(IAuthService auth, IAdminRepository admin, IUserRepository users, ICurrentUserService current)
     {
         _auth = auth;
+        _admin = admin;
         _users = users;
         _current = current;
     }
@@ -60,6 +65,8 @@ public sealed class AuthController : ControllerBase
         var id = _current.UserId;
         var user = await _users.GetByIdAsync(id, ct);
         if (user is null) return NotFound();
+
+        var permissions = await GetPermissionsForRoleAsync(user.Role.ToString(), ct);
         return Ok(new
         {
             user.Id,
@@ -67,10 +74,36 @@ public sealed class AuthController : ControllerBase
             user.Email,
             user.Mobile,
             Role = user.Role.ToString(),
+            permissions,
             user.IsEmailVerified,
             user.IsMobileVerified,
             user.CreatedAt
         });
+    }
+
+    private async Task<IReadOnlyList<string>> GetPermissionsForRoleAsync(string roleName, CancellationToken ct)
+    {
+        var setting = await _admin.GetSettingAsync(RolePermsKey, ct);
+        if (setting is null || string.IsNullOrWhiteSpace(setting.SettingValue)) return Array.Empty<string>();
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string[]>>(setting.SettingValue);
+            if (parsed is null) return Array.Empty<string>();
+
+            return parsed.TryGetValue(roleName, out var keys)
+                ? (keys ?? Array.Empty<string>())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                : Array.Empty<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
     }
 }
 

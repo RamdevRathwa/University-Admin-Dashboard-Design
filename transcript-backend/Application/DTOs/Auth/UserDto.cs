@@ -10,6 +10,7 @@ public sealed record UserDto(
     UserRole Role,
     bool IsEmailVerified,
     bool IsMobileVerified,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<string> Permissions
 );
 

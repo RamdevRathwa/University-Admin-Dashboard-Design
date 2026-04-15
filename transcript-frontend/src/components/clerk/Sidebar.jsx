@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 import { LayoutDashboard, FileCheck2, ClipboardList, FileText, CornerDownLeft, Settings, LogOut } from "lucide-react";
 
-const items = [
+const baseItems = [
   { name: "Dashboard Home", path: "/clerk/dashboard", icon: LayoutDashboard },
   { name: "Transcript Requests", path: "/clerk/requests", icon: FileText },
   { name: "Student Academic Verification", path: "/clerk/verification", icon: FileCheck2 },
@@ -13,7 +13,8 @@ const items = [
   { name: "Settings", path: "/clerk/settings", icon: Settings },
 ];
 
-export default function Sidebar({ collapsed, onLogout, onNavigate }) {
+export default function Sidebar({ collapsed, onLogout, onNavigate, navItems }) {
+  const items = Array.isArray(navItems) && navItems.length ? navItems : baseItems;
   return (
     <aside
       className={`bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 flex flex-col sticky top-0 h-screen ${

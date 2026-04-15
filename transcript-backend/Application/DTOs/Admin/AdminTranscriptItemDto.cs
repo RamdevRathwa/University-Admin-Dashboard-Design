@@ -7,6 +7,7 @@ public sealed record AdminTranscriptItemDto(
     string? PRN,
     decimal CGPA,
     string Status,
-    string? VerificationCode
+    string? VerificationCode,
+    string CurrentStage
 );
 

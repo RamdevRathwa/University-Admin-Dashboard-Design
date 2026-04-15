@@ -34,6 +34,19 @@ public sealed class AdminService : IAdminService
         if (_current.Role != UserRole.Admin) throw AppException.Forbidden();
     }
 
+    private async Task EnsurePermissionAsync(string permissionKey, CancellationToken ct)
+    {
+        if (!_current.IsAuthenticated) throw AppException.Unauthorized();
+        if (_current.Role == UserRole.Admin) return;
+
+        var map = await ReadRolePermissionsAsync(ct);
+        if (!map.TryGetValue(_current.Role.ToString(), out var keys) || keys is null)
+            throw AppException.Forbidden();
+
+        var allowed = keys.Any(k => string.Equals(k, permissionKey, StringComparison.OrdinalIgnoreCase));
+        if (!allowed) throw AppException.Forbidden();
+    }
+
     public async Task<AdminDashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken ct = default)
     {
         EnsureAdmin();
@@ -48,14 +61,14 @@ public sealed class AdminService : IAdminService
 
     public async Task<PagedResultDto<AdminUserItemDto>> ListUsersAsync(string? q, string? role, int page, int pageSize, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("users.manage", ct);
         var parsed = ParseRole(role);
         return await _repo.ListUsersAsync(q, parsed, page, pageSize, ct);
     }
 
     public async Task<AdminUserItemDto> CreateUserAsync(AdminUserUpsertDto dto, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("users.manage", ct);
         var email = NormalizeEmail(dto.Email);
         var mobile = NormalizeMobile(dto.Mobile);
         var name = (dto.FullName ?? string.Empty).Trim();
@@ -92,7 +105,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<AdminUserItemDto> UpdateUserAsync(Guid id, AdminUserUpsertDto dto, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("users.manage", ct);
         var user = await _repo.GetUserForUpdateAsync(id, ct);
         if (user is null || user.DeletedAt != null) throw AppException.NotFound("User not found.");
 
@@ -130,7 +143,7 @@ public sealed class AdminService : IAdminService
 
     public async Task LockUserAsync(Guid id, bool locked, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("users.manage", ct);
         var user = await _repo.GetUserForUpdateAsync(id, ct);
         if (user is null || user.DeletedAt != null) throw AppException.NotFound("User not found.");
 
@@ -143,7 +156,7 @@ public sealed class AdminService : IAdminService
 
     public async Task SoftDeleteUserAsync(Guid id, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("users.manage", ct);
         var user = await _repo.GetUserForUpdateAsync(id, ct);
         if (user is null || user.DeletedAt != null) throw AppException.NotFound("User not found.");
 
@@ -161,22 +174,47 @@ public sealed class AdminService : IAdminService
         await _uow.SaveChangesAsync(ct);
     }
 
-    public Task<IReadOnlyList<object>> ListRolesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<object>> ListRolesAsync(CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("roles.manage", ct);
+
+        var rolePerms = await ReadRolePermissionsAsync(ct);
         var roles = Enum.GetValues<UserRole>()
-            .Select(r => (object)new { id = (int)r, name = r.ToString(), description = string.Empty, permissions = Array.Empty<string>() })
+            .Select(r =>
+            {
+                var key = r.ToString();
+                rolePerms.TryGetValue(key, out var perms);
+                return (object)new
+                {
+                    id = (int)r,
+                    name = key,
+                    description = string.Empty,
+                    permissions = (perms ?? new List<string>()).ToArray()
+                };
+            })
             .ToList()
             .AsReadOnly();
-        return Task.FromResult<IReadOnlyList<object>>(roles);
+        return roles;
     }
 
     public async Task UpdateRolePermissionsAsync(string roleId, object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("roles.manage", ct);
 
-        // Minimal: store the payload under a single settings key so UI doesn't break.
-        var json = JsonSerializer.Serialize(body);
+        var roleName = ResolveRoleName(roleId);
+        if (roleName is null)
+            throw new AppException("Invalid role identifier.", 400, "invalid_role");
+
+        var e = ToJsonElement(body);
+        var incoming = ExtractStringArray(e, "permissions")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var rolePerms = await ReadRolePermissionsAsync(ct);
+        rolePerms[roleName] = incoming;
+
+        var json = JsonSerializer.Serialize(rolePerms);
         var existing = await _repo.GetSettingAsync(RolePermsKey, ct);
         if (existing is null)
         {
@@ -190,20 +228,20 @@ public sealed class AdminService : IAdminService
         }
 
         await _repo.UpsertSettingAsync(existing, ct);
-        await _repo.AddAuditAsync(NewAudit("UPDATE", "SystemSettings", RolePermsKey, null, json), ct);
+        await _repo.AddAuditAsync(NewAudit("UPDATE", "SystemSettings", RolePermsKey, null, JsonSerializer.Serialize(new { role = roleName, permissions = incoming })), ct);
         await _uow.SaveChangesAsync(ct);
     }
 
     public async Task<IReadOnlyList<object>> ListFacultiesAsync(CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("institution.manage", ct);
         var list = await _repo.ListFacultiesAsync(ct);
         return list.Select(f => (object)new { id = f.Id, code = f.Code, name = f.Name, active = f.IsActive }).ToList();
     }
 
     public async Task UpsertFacultyAsync(object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("institution.manage", ct);
         var e = ToJsonElement(body);
         var id = TryGuid(e, "id") ?? Guid.NewGuid();
         var code = GetString(e, "code") ?? string.Empty;
@@ -224,14 +262,14 @@ public sealed class AdminService : IAdminService
 
     public async Task<IReadOnlyList<object>> ListDepartmentsAsync(Guid? facultyId, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("institution.manage", ct);
         var list = await _repo.ListDepartmentsAsync(facultyId, ct);
         return list.Select(d => (object)new { id = d.Id, facultyId = d.FacultyId, code = d.Code, name = d.Name, hodUserId = d.HodUserId, active = d.IsActive }).ToList();
     }
 
     public async Task UpsertDepartmentAsync(object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("institution.manage", ct);
         var e = ToJsonElement(body);
         var id = TryGuid(e, "id") ?? Guid.NewGuid();
         var facultyId = TryGuid(e, "facultyId");
@@ -259,7 +297,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<IReadOnlyList<object>> ListProgramsAsync(CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         var list = await _repo.ListProgramsAsync(ct);
         return list.Select(p => (object)new
         {
@@ -275,7 +313,7 @@ public sealed class AdminService : IAdminService
 
     public async Task UpsertProgramAsync(object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         var e = ToJsonElement(body);
         var id = TryGuid(e, "id") ?? Guid.NewGuid();
         var departmentId = TryGuid(e, "departmentId");
@@ -304,7 +342,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<IReadOnlyList<object>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         var list = await _repo.ListCurriculumVersionsAsync(programId, ct);
         return list.Select(v => (object)new
         {
@@ -320,7 +358,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<object> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         var version = await _repo.GetCurriculumVersionAsync(versionId, ct);
         if (version is null) throw AppException.NotFound("Curriculum version not found.");
 
@@ -341,7 +379,7 @@ public sealed class AdminService : IAdminService
 
     public async Task CreateCurriculumVersionAsync(Guid? programId, object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         if (!programId.HasValue) throw new AppException("ProgramId is required.", 400, "validation_error");
         var e = ToJsonElement(body);
         var academicYear = (GetString(e, "academicYear") ?? string.Empty).Trim();
@@ -369,7 +407,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<IReadOnlyList<object>> ListCurriculumSubjectsAsync(Guid? versionId, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         if (!versionId.HasValue) throw new AppException("VersionId is required.", 400, "validation_error");
 
         var program = await _repo.GetProgramByCurriculumVersionAsync(versionId.Value, ct);
@@ -406,7 +444,7 @@ public sealed class AdminService : IAdminService
 
     public async Task UpsertCurriculumSubjectAsync(Guid? versionId, Guid? curriculumSubjectId, object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         if (!versionId.HasValue) throw new AppException("VersionId is required.", 400, "validation_error");
         if (await _repo.IsCurriculumVersionUsedAsync(versionId.Value, ct))
             throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
@@ -465,7 +503,7 @@ public sealed class AdminService : IAdminService
 
     public async Task DeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         var parentVersionId = await _repo.GetCurriculumVersionIdBySubjectAsync(curriculumSubjectId, ct);
         if (parentVersionId.HasValue && await _repo.IsCurriculumVersionUsedAsync(parentVersionId.Value, ct))
             throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
@@ -477,7 +515,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<int> CloneCurriculumSubjectsAsync(Guid? sourceVersionId, Guid? targetVersionId, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("curriculum.manage", ct);
         if (!sourceVersionId.HasValue) throw new AppException("Source version is required.", 400, "source_version_required");
         if (!targetVersionId.HasValue) throw new AppException("Target version is required.", 400, "target_version_required");
         if (sourceVersionId.Value == targetVersionId.Value) throw new AppException("Source and target versions must be different.", 400, "same_version");
@@ -497,7 +535,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<IReadOnlyList<object>> ListGradingSchemesAsync(CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("grading.manage", ct);
         var list = await _repo.ListGradingSchemesAsync(ct);
         return list.Select(s => (object)new
         {
@@ -511,7 +549,7 @@ public sealed class AdminService : IAdminService
 
     public async Task UpsertGradingSchemeAsync(object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("grading.manage", ct);
         var e = ToJsonElement(body);
         var name = (GetString(e, "name") ?? GetString(e, "schemeName") ?? string.Empty).Trim();
         var type = (GetString(e, "type") ?? GetString(e, "schemeType") ?? "10-Point").Trim();
@@ -535,13 +573,13 @@ public sealed class AdminService : IAdminService
 
     public async Task<PagedResultDto<AdminTranscriptItemDto>> ListTranscriptsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("transcripts.view", ct);
         return await _repo.ListTranscriptsAsync(status, q, page, pageSize, ct);
     }
 
     public async Task PublishTranscriptAsync(Guid id, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("transcripts.publish", ct);
         var t = await _repo.GetTranscriptForUpdateAsync(id, ct);
         if (t is null) throw AppException.NotFound("Transcript not found.");
         if (!t.Locked) throw new AppException("Cannot publish: transcript not approved/locked by Dean.", 400, "not_approved");
@@ -555,7 +593,7 @@ public sealed class AdminService : IAdminService
 
     public async Task<(string path, string fileName)> GetTranscriptDownloadAsync(Guid id, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("transcripts.view", ct);
 
         var transcript = await _transcripts.GetByIdAsync(id, ct);
         if (transcript is null) throw AppException.NotFound("Transcript not found.");
@@ -571,21 +609,21 @@ public sealed class AdminService : IAdminService
         return (transcript.PdfPath, $"Transcript_{transcript.Id:N}.pdf");
     }
 
-    public Task<PagedResultDto<object>> ListPaymentsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResultDto<object>> ListPaymentsAsync(string? status, string? q, int page, int pageSize, CancellationToken ct = default)
     {
-        EnsureAdmin();
-        return Task.FromResult(new PagedResultDto<object>(Array.Empty<object>(), 0, page < 1 ? 1 : page, pageSize));
+        await EnsurePermissionAsync("payments.view", ct);
+        return new PagedResultDto<object>(Array.Empty<object>(), 0, page < 1 ? 1 : page, pageSize);
     }
 
     public async Task<PagedResultDto<object>> ListAuditAsync(string? q, string? action, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("audit.view", ct);
         return await _repo.ListAuditAsync(q, action, from, to, page, pageSize, ct);
     }
 
     public async Task<object> GetSystemSettingsAsync(CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("settings.manage", ct);
         var s = await _repo.GetSettingAsync(SettingsKey, ct);
         if (s is null)
         {
@@ -613,7 +651,7 @@ public sealed class AdminService : IAdminService
 
     public async Task UpdateSystemSettingsAsync(object body, CancellationToken ct = default)
     {
-        EnsureAdmin();
+        await EnsurePermissionAsync("settings.manage", ct);
         var json = JsonSerializer.Serialize(body);
         var s = await _repo.GetSettingAsync(SettingsKey, ct);
         if (s is null)
@@ -713,5 +751,77 @@ public sealed class AdminService : IAdminService
             if (v.ValueKind == JsonValueKind.String && decimal.TryParse(v.GetString(), out var d2)) return d2;
         }
         return null;
+    }
+
+    private async Task<Dictionary<string, List<string>>> ReadRolePermissionsAsync(CancellationToken ct)
+    {
+        var setting = await _repo.GetSettingAsync(RolePermsKey, ct);
+        return ParseRolePermissions(setting?.SettingValue);
+    }
+
+    private static Dictionary<string, List<string>> ParseRolePermissions(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+            if (parsed is null)
+                return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            return parsed.ToDictionary(
+                kv => kv.Key,
+                kv => (kv.Value ?? Array.Empty<string>())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                StringComparer.OrdinalIgnoreCase
+            );
+        }
+        catch
+        {
+            return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static string? ResolveRoleName(string roleId)
+    {
+        var v = (roleId ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(v)) return null;
+
+        if (Enum.TryParse<UserRole>(v, ignoreCase: true, out var byName))
+            return byName.ToString();
+
+        if (int.TryParse(v, out var raw) && Enum.IsDefined(typeof(UserRole), raw))
+            return ((UserRole)raw).ToString();
+
+        return null;
+    }
+
+    private static List<string> ExtractStringArray(JsonElement root, string prop)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return new List<string>();
+        if (!root.TryGetProperty(prop, out var v)) return new List<string>();
+        if (v.ValueKind != JsonValueKind.Array) return new List<string>();
+
+        var list = new List<string>();
+        foreach (var item in v.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var s = item.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) list.Add(s.Trim());
+            }
+            else if (item.ValueKind != JsonValueKind.Null)
+            {
+                var s = item.ToString();
+                if (!string.IsNullOrWhiteSpace(s)) list.Add(s.Trim());
+            }
+        }
+
+        return list;
     }
 }

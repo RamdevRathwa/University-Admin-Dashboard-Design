@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Switch } from "../../components/ui/switch";
 import { useToast } from "../../components/ui/use-toast";
+import { useAuth } from "../../context/AuthContext";
 import { adminService } from "../../services/adminService";
 import { Shield, Save } from "lucide-react";
 
@@ -28,6 +29,7 @@ const PERMISSIONS = [
 
 export default function RoleManagement() {
   const { toast } = useToast();
+  const { refreshCurrentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [roles, setRoles] = useState([]);
@@ -72,6 +74,13 @@ export default function RoleManagement() {
     try {
       const keys = Object.keys(permMap).filter((k) => permMap[k]);
       await adminService.updateRolePermissions(selected.id || selected.roleId || selected.name, { permissions: keys });
+
+      const res = await adminService.listRoles();
+      const list = Array.isArray(res?.items) ? res.items : Array.isArray(res?.roles) ? res.roles : Array.isArray(res) ? res : [];
+      setRoles(list);
+
+      await refreshCurrentUser();
+
       toast({ title: "Permissions saved" });
       setOpen(false);
     } catch (e) {
@@ -153,7 +162,7 @@ export default function RoleManagement() {
         <DialogTrigger asChild>
           <span />
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[760px] rounded-xl">
+        <DialogContent className="sm:max-w-190 rounded-xl">
           <DialogHeader>
             <DialogTitle>Permissions: {selected?.name || selected?.roleName || "Role"}</DialogTitle>
           </DialogHeader>

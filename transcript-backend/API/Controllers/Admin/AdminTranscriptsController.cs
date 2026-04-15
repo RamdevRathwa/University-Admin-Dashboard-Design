@@ -6,7 +6,7 @@ namespace API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/transcripts")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class AdminTranscriptsController : ControllerBase
 {
     private readonly IAdminService _admin;

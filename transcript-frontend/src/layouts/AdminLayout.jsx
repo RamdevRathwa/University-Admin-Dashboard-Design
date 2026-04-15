@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import universityLogo from "../assets/university-logo.png";
 import { Sheet, SheetContent } from "../components/ui/sheet";
@@ -31,8 +31,20 @@ const navItems = [
   { name: "System Settings", path: "/admin/settings", icon: Sliders },
 ];
 
+const permissionByPathPrefix = [
+  { prefix: "/admin/users", permission: "users.manage" },
+  { prefix: "/admin/roles", permission: "roles.manage" },
+  { prefix: "/admin/faculty", permission: "institution.manage" },
+  { prefix: "/admin/curriculum", permission: "curriculum.manage" },
+  { prefix: "/admin/grading", permission: "grading.manage" },
+  { prefix: "/admin/transcripts", permission: "transcripts.view" },
+  { prefix: "/admin/payments", permission: "payments.view" },
+  { prefix: "/admin/audit", permission: "audit.view" },
+  { prefix: "/admin/settings", permission: "settings.manage" },
+];
+
 export default function AdminLayout() {
-  const { user, logout } = useAuth();
+  const { user, permissions, hasPermission, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
@@ -60,6 +72,29 @@ export default function AdminLayout() {
     navigate("/login");
   };
 
+  const permissionAwareNavItems = useMemo(() => {
+    // Backward compatibility: when no permissions are defined for the role yet, keep legacy full menu.
+    if (!Array.isArray(permissions) || permissions.length === 0) return navItems;
+
+    return navItems.filter((item) => {
+      const match = permissionByPathPrefix.find((x) => item.path.startsWith(x.prefix));
+      if (!match) return true;
+      return hasPermission(match.permission);
+    });
+  }, [hasPermission, permissions]);
+
+  useEffect(() => {
+    if (!Array.isArray(permissions) || permissions.length === 0) return;
+
+    const current = location.pathname;
+    const match = permissionByPathPrefix.find((x) => current.startsWith(x.prefix));
+    if (!match) return;
+
+    if (!hasPermission(match.permission)) {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [hasPermission, location.pathname, navigate, permissions]);
+
   return (
     <div className="flex min-h-screen bg-gray-100 dark:bg-slate-950 text-gray-900 dark:text-slate-100">
       <div className="hidden lg:block">
@@ -69,7 +104,7 @@ export default function AdminLayout() {
           logoAlt="Maharaja Sayajirao University of Baroda"
           panelTitle="Admin Panel"
           panelSubtitle="Transcript System"
-          navItems={navItems}
+          navItems={permissionAwareNavItems}
           onLogout={doLogout}
           ariaLabel="Admin sidebar"
         />
@@ -83,7 +118,7 @@ export default function AdminLayout() {
             logoAlt="Maharaja Sayajirao University of Baroda"
             panelTitle="Admin Panel"
             panelSubtitle="Transcript System"
-            navItems={navItems}
+            navItems={permissionAwareNavItems}
             onLogout={doLogout}
             onNavigate={() => setMobileOpen(false)}
             ariaLabel="Admin sidebar"

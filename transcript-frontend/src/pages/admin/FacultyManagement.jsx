@@ -203,15 +203,19 @@ export default function FacultyManagement() {
   const saveDepartment = async () => {
     setSaving(true);
     try {
+      const targetFacultyId = deptForm.facultyId || selectedFacultyId;
       await adminService.upsertDepartment({
         id: deptForm.id || undefined,
-        facultyId: deptForm.facultyId || selectedFacultyId,
+        facultyId: targetFacultyId,
         code: deptForm.code,
         name: deptForm.name,
         hodUserId: deptForm.hodUserId || undefined,
         active: true,
       });
-      await loadDepartments(deptForm.facultyId || selectedFacultyId);
+      if (targetFacultyId && String(targetFacultyId) !== String(selectedFacultyId || "")) {
+        setSelectedFacultyId(String(targetFacultyId));
+      }
+      await loadDepartments(targetFacultyId);
       setOpenDept(false);
       toast({ title: deptForm.id ? "Department updated" : "Department created" });
     } catch (e) {
@@ -299,8 +303,8 @@ export default function FacultyManagement() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Faculty & Department Management"
-        description="Manage institutional structure in a single workspace, with fast selection on the left and quick department actions on the right."
+        title="Faculty and Department Management"
+        description="Manage faculties and departments with a unified workspace for structure updates and HoD mapping."
       />
 
       {error ? (
@@ -309,16 +313,16 @@ export default function FacultyManagement() {
         </Alert>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="overflow-hidden border-gray-200 shadow-sm">
           <CardContent className="p-0">
             <div className="border-b border-gray-100 px-5 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Faculties</div>
+                  <div className="text-xl font-semibold text-gray-900">Faculty Management</div>
                   <div className="mt-2 text-xl font-semibold text-gray-900">{loading ? "..." : faculties.length}</div>
                 </div>
-                <Button type="button" size="sm" onClick={openNewFaculty} className="rounded-xl">
+                <Button type="button" size="sm" onClick={openNewFaculty} className="shrink-0 whitespace-nowrap rounded-xl px-4">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Faculty
                 </Button>
@@ -371,7 +375,7 @@ export default function FacultyManagement() {
                           </button>
 
                           <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
-                            <div className="text-xs text-gray-500">Institution group</div>
+                            <div className="text-xs text-gray-500">Institution Group</div>
                             <div className="flex items-center gap-2">
                               <button type="button" className={iconButtonClasses()} onClick={() => openEditFaculty(faculty)} title="Edit faculty">
                                 <Pencil className="h-4 w-4" />
@@ -396,9 +400,7 @@ export default function FacultyManagement() {
               <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="text-xl font-semibold text-gray-900">
-                      {selectedFaculty?.name || selectedFaculty?.facultyName || "Departments"}
-                    </div>
+                    <div className="text-xl font-semibold text-gray-900">Department Management</div>
                     {selectedFacultyId ? (
                       <Badge className="border-blue-200 bg-blue-50 text-blue-700">
                         {activeDepartmentCount} department{activeDepartmentCount === 1 ? "" : "s"}
@@ -407,18 +409,35 @@ export default function FacultyManagement() {
                   </div>
                   <p className="mt-2 text-sm text-gray-500">
                     {selectedFacultyId
-                      ? "Manage department records, assign HoD mappings inline, and keep the faculty structure tidy."
-                      : "Select a faculty from the left panel to view its departments."}
+                      ? "Manage department records, assign HoD mappings inline, and keep each faculty structure tidy."
+                      : "Select a faculty to view and manage its departments."}
                   </p>
                 </div>
-                <Button type="button" onClick={openNewDepartment} disabled={!selectedFacultyId} className="rounded-xl">
+                <Button type="button" onClick={openNewDepartment} disabled={!selectedFacultyId} className="shrink-0 whitespace-nowrap rounded-xl px-4">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Department
                 </Button>
               </div>
 
-              {selectedFacultyId ? (
-                <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_200px]">
+              {faculties.length ? (
+                <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[260px_minmax(0,1fr)_200px]">
+                  <Select value={selectedFacultyId} onValueChange={setSelectedFacultyId}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Select faculty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {faculties
+                        .filter((faculty) => faculty.active !== false)
+                        .map((faculty) => {
+                          const id = String(faculty.id || faculty.facultyId || "");
+                          return (
+                            <SelectItem key={id} value={id}>
+                              {faculty.name || faculty.facultyName || "Faculty"}
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <Input
@@ -468,13 +487,13 @@ export default function FacultyManagement() {
                   onAction={departments.length === 0 ? openNewDepartment : undefined}
                 />
               ) : (
-                <div className="overflow-hidden rounded-2xl border border-gray-200">
-                  <Table>
+                <div className="overflow-x-auto rounded-2xl border border-gray-200">
+                  <Table className="min-w-215">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[140px]">Code</TableHead>
                         <TableHead>Department</TableHead>
-                        <TableHead className="w-[320px]">HoD Assignment</TableHead>
+                        <TableHead className="w-90">HoD Assignment</TableHead>
                         <TableHead className="w-[120px]">Status</TableHead>
                         <TableHead className="w-[120px] text-right">Actions</TableHead>
                       </TableRow>
@@ -491,7 +510,7 @@ export default function FacultyManagement() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <div className="relative min-w-0 flex-1">
+                                <div className="relative min-w-55 flex-1">
                                   <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                                   <Input
                                     value={hodDrafts[id] ?? ""}
@@ -504,7 +523,7 @@ export default function FacultyManagement() {
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  className="rounded-xl"
+                                  className="shrink-0 rounded-xl"
                                   onClick={() => saveInlineHod(department)}
                                   disabled={savingHodId === id}
                                 >
@@ -575,7 +594,23 @@ export default function FacultyManagement() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
               <Label>Faculty</Label>
-              <Input value={selectedFaculty?.name || selectedFaculty?.facultyName || ""} readOnly />
+              <Select value={deptForm.facultyId} onValueChange={(value) => setDeptForm((prev) => ({ ...prev, facultyId: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select faculty" />
+                </SelectTrigger>
+                <SelectContent>
+                  {faculties
+                    .filter((faculty) => faculty.active !== false)
+                    .map((faculty) => {
+                      const id = String(faculty.id || faculty.facultyId || "");
+                      return (
+                        <SelectItem key={id} value={id}>
+                          {(faculty.code || faculty.facultyCode || "-") + " - " + (faculty.name || faculty.facultyName || "Faculty")}
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Department Code</Label>
@@ -594,7 +629,7 @@ export default function FacultyManagement() {
             <Button type="button" variant="outline" onClick={() => setOpenDept(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={saveDepartment} disabled={saving || !selectedFacultyId}>
+            <Button type="button" onClick={saveDepartment} disabled={saving || !deptForm.facultyId}>
               <Save className="mr-2 h-4 w-4" />
               {saving ? "Saving..." : "Save Department"}
             </Button>

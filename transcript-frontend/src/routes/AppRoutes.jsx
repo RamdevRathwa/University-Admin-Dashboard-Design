@@ -141,6 +141,16 @@ export default function AppRoutes() {
           <Route path="requests" element={<ClerkTranscriptRequests />} />
           <Route path="requests/:id" element={<ClerkTranscriptRequests />} />
           <Route path="rejected" element={<ClerkReturnedRequests />} />
+          <Route path="modules/users" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="users.manage"><UserManagement /></ProtectedRoute>} />
+          <Route path="modules/roles" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="roles.manage"><RoleManagement /></ProtectedRoute>} />
+          <Route path="modules/faculty" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="institution.manage"><FacultyManagement /></ProtectedRoute>} />
+          <Route path="modules/curriculum" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="curriculum.manage"><ProgramCurriculum /></ProtectedRoute>} />
+          <Route path="modules/curriculum/:versionId/subjects" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="curriculum.manage"><CurriculumSubjectsPage /></ProtectedRoute>} />
+          <Route path="modules/grading" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="grading.manage"><GradingScheme /></ProtectedRoute>} />
+          <Route path="modules/transcripts" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="transcripts.view"><TranscriptRecords /></ProtectedRoute>} />
+          <Route path="modules/payments" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="payments.view"><PaymentsPage /></ProtectedRoute>} />
+          <Route path="modules/audit" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="audit.view"><AuditLogsPage /></ProtectedRoute>} />
+          <Route path="modules/settings" element={<ProtectedRoute requiredRole="Clerk" requiredPermission="settings.manage"><SystemSettings /></ProtectedRoute>} />
           <Route path="settings" element={<ClerkSettings />} />
         </Route>
 
@@ -158,6 +168,16 @@ export default function AppRoutes() {
           <Route path="review/:id" element={<HodReviewPage />} />
           <Route path="approved" element={<HodApprovedRequests />} />
           <Route path="rejected" element={<HodRejectedRequests />} />
+          <Route path="modules/users" element={<ProtectedRoute requiredRole="HoD" requiredPermission="users.manage"><UserManagement /></ProtectedRoute>} />
+          <Route path="modules/roles" element={<ProtectedRoute requiredRole="HoD" requiredPermission="roles.manage"><RoleManagement /></ProtectedRoute>} />
+          <Route path="modules/faculty" element={<ProtectedRoute requiredRole="HoD" requiredPermission="institution.manage"><FacultyManagement /></ProtectedRoute>} />
+          <Route path="modules/curriculum" element={<ProtectedRoute requiredRole="HoD" requiredPermission="curriculum.manage"><ProgramCurriculum /></ProtectedRoute>} />
+          <Route path="modules/curriculum/:versionId/subjects" element={<ProtectedRoute requiredRole="HoD" requiredPermission="curriculum.manage"><CurriculumSubjectsPage /></ProtectedRoute>} />
+          <Route path="modules/grading" element={<ProtectedRoute requiredRole="HoD" requiredPermission="grading.manage"><GradingScheme /></ProtectedRoute>} />
+          <Route path="modules/transcripts" element={<ProtectedRoute requiredRole="HoD" requiredPermission="transcripts.view"><TranscriptRecords /></ProtectedRoute>} />
+          <Route path="modules/payments" element={<ProtectedRoute requiredRole="HoD" requiredPermission="payments.view"><PaymentsPage /></ProtectedRoute>} />
+          <Route path="modules/audit" element={<ProtectedRoute requiredRole="HoD" requiredPermission="audit.view"><AuditLogsPage /></ProtectedRoute>} />
+          <Route path="modules/settings" element={<ProtectedRoute requiredRole="HoD" requiredPermission="settings.manage"><SystemSettings /></ProtectedRoute>} />
           <Route path="settings" element={<HodSettings />} />
         </Route>
 
@@ -175,6 +195,16 @@ export default function AppRoutes() {
           <Route path="review/:id" element={<DeanReviewPage />} />
           <Route path="approved" element={<DeanApprovedTranscripts />} />
           <Route path="rejected" element={<DeanRejectedTranscripts />} />
+          <Route path="modules/users" element={<ProtectedRoute requiredRole="Dean" requiredPermission="users.manage"><UserManagement /></ProtectedRoute>} />
+          <Route path="modules/roles" element={<ProtectedRoute requiredRole="Dean" requiredPermission="roles.manage"><RoleManagement /></ProtectedRoute>} />
+          <Route path="modules/faculty" element={<ProtectedRoute requiredRole="Dean" requiredPermission="institution.manage"><FacultyManagement /></ProtectedRoute>} />
+          <Route path="modules/curriculum" element={<ProtectedRoute requiredRole="Dean" requiredPermission="curriculum.manage"><ProgramCurriculum /></ProtectedRoute>} />
+          <Route path="modules/curriculum/:versionId/subjects" element={<ProtectedRoute requiredRole="Dean" requiredPermission="curriculum.manage"><CurriculumSubjectsPage /></ProtectedRoute>} />
+          <Route path="modules/grading" element={<ProtectedRoute requiredRole="Dean" requiredPermission="grading.manage"><GradingScheme /></ProtectedRoute>} />
+          <Route path="modules/transcripts" element={<ProtectedRoute requiredRole="Dean" requiredPermission="transcripts.view"><TranscriptRecords /></ProtectedRoute>} />
+          <Route path="modules/payments" element={<ProtectedRoute requiredRole="Dean" requiredPermission="payments.view"><PaymentsPage /></ProtectedRoute>} />
+          <Route path="modules/audit" element={<ProtectedRoute requiredRole="Dean" requiredPermission="audit.view"><AuditLogsPage /></ProtectedRoute>} />
+          <Route path="modules/settings" element={<ProtectedRoute requiredRole="Dean" requiredPermission="settings.manage"><SystemSettings /></ProtectedRoute>} />
           <Route path="settings" element={<DeanSettings />} />
         </Route>
 

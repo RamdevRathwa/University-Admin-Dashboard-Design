@@ -1,8 +1,8 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-export default function ProtectedRoute({ children, requiredRole }) {
-  const { isAuthenticated, userRole, loading } = useAuth();
+export default function ProtectedRoute({ children, requiredRole, requiredPermission }) {
+  const { isAuthenticated, userRole, loading, hasPermission } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -26,6 +26,17 @@ export default function ProtectedRoute({ children, requiredRole }) {
         <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-sm">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Access Denied</h2>
           <p className="text-gray-600 dark:text-slate-400">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-slate-950 p-6">
+        <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center shadow-sm">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-slate-100 mb-2">Permission Required</h2>
+          <p className="text-gray-600 dark:text-slate-400">You don't have access to this module.</p>
         </div>
       </div>
     );

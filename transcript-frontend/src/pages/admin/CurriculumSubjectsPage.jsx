@@ -30,6 +30,7 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
+import { getElectiveOptions } from "../../components/clerk/grade-entry/electiveOptions";
 
 const defaultForm = {
   id: "",
@@ -97,6 +98,15 @@ export default function CurriculumSubjectsPage() {
   const [resolvedVersionInfo, setResolvedVersionInfo] = useState(location.state || {});
 
   const versionInfo = resolvedVersionInfo;
+  const curriculumBasePath = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith("/admin")) return "/admin/curriculum";
+    if (path.startsWith("/clerk")) return "/clerk/modules/curriculum";
+    if (path.startsWith("/hod")) return "/hod/modules/curriculum";
+    if (path.startsWith("/dean")) return "/dean/modules/curriculum";
+    return "/admin/curriculum";
+  }, [location.pathname]);
+
   const locked = subjects.some((item) => item.locked);
   const cloneSourceVersion = useMemo(() => {
     const currentId = String(versionId || "");
@@ -343,7 +353,7 @@ export default function CurriculumSubjectsPage() {
         description="Semester-wise subject mapping for this curriculum version."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" className="rounded-xl" onClick={() => navigate("/admin/curriculum")}>
+            <Button variant="outline" className="rounded-xl" onClick={() => navigate(curriculumBasePath)}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
             </Button>
@@ -594,6 +604,35 @@ export default function CurriculumSubjectsPage() {
                 <SelectContent><SelectItem value="false">Core</SelectItem><SelectItem value="true">Elective</SelectItem></SelectContent>
               </Select>
             </div>
+            {form.isElective === "true" && versionInfo.program?.includes("CSE") && (
+              <div className="space-y-2">
+                <Label>CSE Elective Options</Label>
+                <Select 
+                  onValueChange={(value) => {
+                    const option = getElectiveOptions("BE-CSE", { name: form.subjectName }).find(o => o.value === value);
+                    if (option) {
+                      setForm((prev) => ({ ...prev, subjectName: option.label }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select elective from preset" /></SelectTrigger>
+                  <SelectContent className="w-[360px]">
+                    <SelectItem value="">-- Manual Entry --</SelectItem>
+                    {(() => {
+                      const allOptions = [
+                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-I" }),
+                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-II" }),
+                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-III" }),
+                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-IV" }),
+                      ];
+                      return allOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={form.active} onValueChange={(value) => setForm((prev) => ({ ...prev, active: value }))}>

@@ -6,7 +6,7 @@ namespace API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/settings")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public sealed class AdminSettingsController : ControllerBase
 {
     private readonly IAdminService _admin;

@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState } from "react";
 import { authService } from "../services/authService";
+import { useEffect } from "react";
 
 const AuthContext = createContext(null);
 
@@ -56,6 +57,12 @@ export const AuthProvider = ({ children }) => {
   const [userRole, setUserRole] = useState(initial.userRole);
   const [user, setUser] = useState(initial.user);
   const [loading] = useState(false);
+
+  const permissions = Array.isArray(user?.permissions)
+    ? user.permissions
+    : Array.isArray(user?.permissionKeys)
+    ? user.permissionKeys
+    : [];
 
   const writeAuthToStorage = ({ token, role, userData, rememberAuth }) => {
     clearAuthStorage();
@@ -152,10 +159,20 @@ export const AuthProvider = ({ children }) => {
     return me;
   };
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    refreshCurrentUser().catch(() => {
+      // keep existing session state if profile refresh fails
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
   const value = {
     isAuthenticated,
     userRole,
     user,
+    permissions,
+    hasPermission: (permissionKey) => permissions.includes(permissionKey),
     loading,
     requestRegistrationOtp,
     requestLoginOtp,

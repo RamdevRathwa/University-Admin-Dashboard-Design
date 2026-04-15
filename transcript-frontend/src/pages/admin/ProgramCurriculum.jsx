@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Badge } from "../../components/ui/badge";
@@ -15,9 +15,12 @@ import { adminService } from "../../services/adminService";
 import { BookOpen, Plus } from "lucide-react";
 import PageHeader from "../../components/shell/PageHeader";
 import EmptyState from "../../components/shell/EmptyState";
+import { useAuth } from "../../context/AuthContext";
 
 export default function ProgramCurriculum() {
   const { toast } = useToast();
+  const { hasPermission } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,6 +66,15 @@ export default function ProgramCurriculum() {
     return programs.filter((program) => String(program.departmentId || program.department_id || "") === String(departmentId));
   }, [programs, departmentId]);
 
+  const curriculumBasePath = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith("/admin")) return "/admin/curriculum";
+    if (path.startsWith("/clerk")) return "/clerk/modules/curriculum";
+    if (path.startsWith("/hod")) return "/hod/modules/curriculum";
+    if (path.startsWith("/dean")) return "/dean/modules/curriculum";
+    return "/admin/curriculum";
+  }, [location.pathname]);
+
   const loadPrograms = async () => {
     setLoading(true);
     setError("");
@@ -80,18 +92,27 @@ export default function ProgramCurriculum() {
 
   const loadProgramLookups = async () => {
     try {
-      const [facultyRes, departmentRes, gradingRes] = await Promise.all([adminService.listFaculties(), adminService.listDepartments(""), adminService.listGradingSchemes()]);
+      const lookups = await Promise.allSettled([
+        hasPermission("institution.manage") ? adminService.listFaculties() : Promise.resolve(null),
+        hasPermission("institution.manage") ? adminService.listDepartments("") : Promise.resolve(null),
+        hasPermission("grading.manage") ? adminService.listGradingSchemes() : Promise.resolve(null),
+      ]);
+
+      const facultyRes = lookups[0].status === "fulfilled" ? lookups[0].value : null;
+      const departmentRes = lookups[1].status === "fulfilled" ? lookups[1].value : null;
+      const gradingRes = lookups[2].status === "fulfilled" ? lookups[2].value : null;
+
       const facultyList = Array.isArray(facultyRes?.items) ? facultyRes.items : Array.isArray(facultyRes) ? facultyRes : [];
       const departmentList = Array.isArray(departmentRes?.items) ? departmentRes.items : Array.isArray(departmentRes) ? departmentRes : [];
       const gradingList = Array.isArray(gradingRes?.items) ? gradingRes.items : Array.isArray(gradingRes) ? gradingRes : [];
       setFaculties(facultyList);
       setDepartments(departmentList);
       setGradingSchemes(gradingList);
-      setFacultyId((current) => current || String(facultyList[0]?.id || facultyList[0]?.facultyId || ""));
+      if (facultyList.length) setFacultyId((current) => current || String(facultyList[0]?.id || facultyList[0]?.facultyId || ""));
       setNewProgram((prev) => ({
         ...prev,
-        departmentId: prev.departmentId || String(departmentList[0]?.id || departmentList[0]?.departmentId || ""),
-        gradingSchemeId: prev.gradingSchemeId || String(gradingList[0]?.id || ""),
+        departmentId: prev.departmentId || (departmentList.length ? String(departmentList[0]?.id || departmentList[0]?.departmentId || "") : prev.departmentId),
+        gradingSchemeId: prev.gradingSchemeId || (gradingList.length ? String(gradingList[0]?.id || "") : prev.gradingSchemeId),
       }));
     } catch (e) {
       setError((current) => current || e?.message || "Failed to load program lookups.");
@@ -353,7 +374,7 @@ export default function ProgramCurriculum() {
                               variant="outline"
                               className="rounded-xl"
                               onClick={() =>
-                                navigate(`/admin/curriculum/${encodeURIComponent(String(version.id || version.versionId))}/subjects`, {
+                                navigate(`${curriculumBasePath}/${encodeURIComponent(String(version.id || version.versionId))}/subjects`, {
                                   state: {
                                     programName: programMap.get(String(programId || ""))?.name || programMap.get(String(programId || ""))?.programName || "",
                                     programCode: programMap.get(String(programId || ""))?.code || programMap.get(String(programId || ""))?.programCode || "",

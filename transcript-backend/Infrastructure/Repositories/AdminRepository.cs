@@ -1064,9 +1064,19 @@ public sealed class AdminRepository : IAdminRepository
             .ToDictionaryAsync(m => m.TranscriptId, m => m.LegacyTranscriptGuid, ct);
 
         var reqIds = rows.Select(r => r.TranscriptRequestId).Distinct().ToList();
-        var reqNos = await _db.TranscriptRequests.AsNoTracking()
+        var reqMetaById = await _db.TranscriptRequests.AsNoTracking()
             .Where(r => reqIds.Contains(r.TranscriptRequestId))
-            .ToDictionaryAsync(r => r.TranscriptRequestId, r => r.RequestNo, ct);
+            .ToDictionaryAsync(
+                r => r.TranscriptRequestId,
+                r => new { r.RequestNo, r.StatusId, r.CurrentStageRoleId },
+                ct
+            );
+
+        var statusById = await _db.TranscriptStatuses.AsNoTracking()
+            .ToDictionaryAsync(s => s.StatusId, s => s.StatusCode, ct);
+
+        var roleById = await _db.Roles.AsNoTracking()
+            .ToDictionaryAsync(r => r.RoleId, r => r.RoleName, ct);
 
         var studentIds = rows.Select(r => r.StudentId).Distinct().ToList();
         var prns = await _db.Students.AsNoTracking()
@@ -1084,22 +1094,30 @@ public sealed class AdminRepository : IAdminRepository
         var items = rows.Select(r =>
         {
             legacyIds.TryGetValue(r.TranscriptId, out var gid);
-            reqNos.TryGetValue(r.TranscriptRequestId, out var reqNo);
+            reqMetaById.TryGetValue(r.TranscriptRequestId, out var reqMeta);
             prns.TryGetValue(r.StudentId, out var prn);
             userIds.TryGetValue(r.StudentId, out var uid);
             names.TryGetValue(uid, out var nm);
 
-            var st = (r.IsLocked ?? false) ? "Locked" : "Approved";
+            var st = r.PublishedAt != null
+                ? "Published"
+                : (r.IsLocked ?? false)
+                    ? "ReadyToPublish"
+                    : "Approved";
+            var statusCode = reqMeta is null || !statusById.TryGetValue(reqMeta.StatusId, out var sc) ? string.Empty : sc;
+            var roleName = reqMeta is null || !roleById.TryGetValue(reqMeta.CurrentStageRoleId, out var rn) ? string.Empty : rn;
+            var stage = GetCurrentStageLabel(statusCode, roleName, r.PublishedAt != null, r.IsLocked ?? false);
             var id = gid == Guid.Empty ? EncodeInt64Guid(0xD1, r.TranscriptId) : gid;
 
             return new AdminTranscriptItemDto(
                 id,
-                reqNo ?? string.Empty,
+                reqMeta?.RequestNo ?? string.Empty,
                 nm ?? "Student",
                 prn,
                 r.Cgpa,
                 st,
-                null
+                null,
+                stage
             );
         }).ToList();
 
@@ -1145,6 +1163,28 @@ public sealed class AdminRepository : IAdminRepository
         b[0] = prefix;
         BitConverter.TryWriteBytes(b.Slice(1, 8), value);
         return new Guid(b);
+    }
+
+    private static string GetCurrentStageLabel(string? statusCode, string? roleName, bool isPublished, bool isLocked)
+    {
+        if (isPublished) return "Published";
+        if (isLocked) return "Admin";
+
+        var role = (roleName ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(role)) return role;
+
+        return (statusCode ?? string.Empty).Trim() switch
+        {
+            "Draft" => "Student",
+            "Submitted" => "Clerk",
+            "GradeEntry" => "Clerk",
+            "ReturnedToClerk" => "Clerk",
+            "ForwardedToHoD" => "HoD",
+            "ForwardedToDean" => "Dean",
+            "Approved" => "Admin",
+            "Rejected" => "Rejected",
+            _ => "Admin"
+        };
     }
 
     private static int? DecodeInt32Guid(Guid g)

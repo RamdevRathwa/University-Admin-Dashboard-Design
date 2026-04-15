@@ -134,8 +134,10 @@ export default function SemesterTranscriptTable({
                       const options = getElectiveOptions(program, r);
                       const isElective = r.isElective || r.IsElective || isElectivePlaceholder(r);
                       const selectedElective = electiveSelections?.[id] || "";
+                      const hasOptions = options && options.length > 0;
 
-                      if (isElective && options.length > 0 && !readOnly) {
+                      // Show dropdown if: it's marked as elective AND has options, OR if we have options (implicit elective)
+                      if ((isElective || hasOptions) && hasOptions && !readOnly) {
                         return (
                           <div className="space-y-1">
                             <Select value={selectedElective} onValueChange={(v) => setElectiveSelection?.(id, v)}>
@@ -161,7 +163,7 @@ export default function SemesterTranscriptTable({
                       return (
                         <div className="leading-tight">
                           <div className="text-gray-900">{selectedLabel || persistedSelection || subjectName}</div>
-                          {isElective ? (
+                          {isElective || hasOptions ? (
                             <div className="mt-1 text-[10px] uppercase tracking-wide text-amber-700">Elective subject</div>
                           ) : null}
                         </div>

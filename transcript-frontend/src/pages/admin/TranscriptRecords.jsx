@@ -11,17 +11,44 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
-import { FileText, Download, CheckCircle2, Send } from "lucide-react";
+import { FileText, Download, CheckCircle2 } from "lucide-react";
 import PageHeader from "../../components/shell/PageHeader";
 import EmptyState from "../../components/shell/EmptyState";
 
-function StatusBadge({ status }) {
-  const s = String(status || "").toUpperCase();
-  if (s.includes("PENDING")) return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
-  if (s.includes("APPROVED") || s.includes("LOCK")) return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Approved</Badge>;
-  if (s.includes("REJECT")) return <Badge variant="destructive">Rejected</Badge>;
+function StageBadge({ stage }) {
+  const s = String(stage || "").toUpperCase();
+  if (s.includes("CLERK")) return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Clerk Level</Badge>;
+  if (s.includes("HOD")) return <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100">HoD Level</Badge>;
+  if (s.includes("DEAN")) return <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100">Dean Level</Badge>;
+  if (s.includes("ADMIN")) return <Badge className="bg-indigo-100 text-indigo-800 hover:bg-indigo-100">Admin Level</Badge>;
   if (s.includes("PUBLISH")) return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Published</Badge>;
-  return <Badge variant="secondary">{status || "—"}</Badge>;
+  if (s.includes("STUDENT")) return <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100">Student Level</Badge>;
+  if (s.includes("REJECT")) return <Badge variant="destructive">Rejected</Badge>;
+  return <Badge variant="secondary">{stage || "—"}</Badge>;
+}
+
+function getTranscriptStatus(t) {
+  const status =
+    t?.status ||
+    t?.statusCode ||
+    t?.transcriptStatus ||
+    t?.requestStatus ||
+    "";
+
+  return String(status || "");
+}
+
+function getTranscriptStage(t) {
+  const stage = t?.currentStage || t?.stage || t?.workflowStage || "";
+  if (stage) return String(stage);
+
+  const status = getTranscriptStatus(t).toUpperCase();
+  if (status.includes("PUBLISH")) return "Published";
+  if (status.includes("LOCK") || status.includes("READYTOPUBLISH")) return "Admin";
+  if (status.includes("APPROVED")) return "Dean";
+  if (status.includes("PENDING")) return "Clerk";
+  if (status.includes("REJECT")) return "Rejected";
+  return "-";
 }
 
 export default function TranscriptRecords() {
@@ -60,16 +87,6 @@ export default function TranscriptRecords() {
   const review = (t) => {
     setSelected(t);
     setOpen(true);
-  };
-
-  const publish = async (t) => {
-    try {
-      await adminService.publishTranscript(t.id || t.transcriptId);
-      toast({ title: "Transcript published" });
-      await load();
-    } catch (e) {
-      toast({ title: "Publish failed", description: e?.message || "Unable to publish transcript.", variant: "destructive" });
-    }
   };
 
   const download = async (t) => {
@@ -159,7 +176,7 @@ export default function TranscriptRecords() {
                   <TableHead>Student</TableHead>
                   <TableHead>PRN</TableHead>
                   <TableHead>CGPA</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Stage of Transcript</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -193,7 +210,7 @@ export default function TranscriptRecords() {
                       <TableCell>{t.studentName || "—"}</TableCell>
                       <TableCell className="text-sm text-gray-600">{t.prn || "—"}</TableCell>
                       <TableCell className="text-sm text-gray-600">{t.cgpa ?? "—"}</TableCell>
-                      <TableCell><StatusBadge status={t.status} /></TableCell>
+                      <TableCell><StageBadge stage={getTranscriptStage(t)} /></TableCell>
                       <TableCell className="text-right">
                         <div className="inline-flex items-center gap-2">
                           <Button variant="outline" className="rounded-xl" onClick={() => review(t)}>
@@ -202,15 +219,6 @@ export default function TranscriptRecords() {
                           <Button variant="outline" className="rounded-xl" onClick={() => download(t)} disabled={downloadingId === (t.id || t.transcriptId)}>
                             <Download className="h-4 w-4 mr-2" />
                             {downloadingId === (t.id || t.transcriptId) ? "Downloading..." : "Download"}
-                          </Button>
-                          <Button
-                            className="rounded-xl bg-[#1e40af] hover:bg-[#1e3a8a]"
-                            onClick={() => publish(t)}
-                            disabled={!String(t.status || "").toUpperCase().includes("APPROVED")}
-                            title="Publish only after Dean approval"
-                          >
-                            <Send className="h-4 w-4 mr-2" />
-                            Publish
                           </Button>
                         </div>
                       </TableCell>
@@ -224,7 +232,7 @@ export default function TranscriptRecords() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[760px] rounded-xl">
+        <DialogContent className="sm:max-w-190 rounded-xl">
           <DialogHeader>
             <DialogTitle>Transcript Details</DialogTitle>
           </DialogHeader>
@@ -239,8 +247,8 @@ export default function TranscriptRecords() {
               <p className="text-sm font-medium text-gray-900 mt-1">{selected?.prn || "—"}</p>
             </div>
             <div className="rounded-xl border border-gray-200 p-3">
-              <p className="text-xs text-gray-500">Status</p>
-              <div className="mt-1"><StatusBadge status={selected?.status} /></div>
+              <p className="text-xs text-gray-500">Stage of Transcript</p>
+              <div className="mt-1"><StageBadge stage={getTranscriptStage(selected)} /></div>
             </div>
             <div className="rounded-xl border border-gray-200 p-3">
               <p className="text-xs text-gray-500">Verification Code</p>
