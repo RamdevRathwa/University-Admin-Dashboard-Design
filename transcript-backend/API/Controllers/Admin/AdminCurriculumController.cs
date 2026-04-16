@@ -47,6 +47,13 @@ public sealed class AdminCurriculumController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("curriculum/versions/{id:guid}")]
+    public async Task<IActionResult> DeleteVersion([FromRoute] Guid id, CancellationToken ct)
+    {
+        await _admin.DeleteCurriculumVersionAsync(id, ct);
+        return NoContent();
+    }
+
     [HttpGet("curriculum/subjects")]
     public async Task<IActionResult> Subjects([FromQuery] Guid? versionId, CancellationToken ct)
     {

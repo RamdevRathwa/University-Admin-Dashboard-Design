@@ -40,6 +40,8 @@ export const adminService = {
   upsertProgram: async (body) => apiRequest("/api/admin/programs", { method: "POST", body }),
   createCurriculumVersion: async (programId, body) =>
     apiRequest(`/api/admin/curriculum/versions?programId=${encodeURIComponent(programId || "")}`, { method: "POST", body }),
+  deleteCurriculumVersion: async (versionId) =>
+    apiRequest(`/api/admin/curriculum/versions/${encodeURIComponent(versionId || "")}`, { method: "DELETE" }),
   listCurriculumSubjects: async (versionId) =>
     apiRequest(`/api/admin/curriculum/subjects?versionId=${encodeURIComponent(versionId || "")}`),
   createCurriculumSubject: async (versionId, body) =>

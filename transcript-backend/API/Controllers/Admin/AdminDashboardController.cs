@@ -23,7 +23,10 @@ public sealed class AdminDashboardController : ControllerBase
             pendingTranscripts = s.PendingTranscripts,
             approvedTranscripts = s.ApprovedTranscripts,
             totalPaymentsReceived = s.TotalPaymentsReceived,
-            systemAlerts = s.SystemAlerts
+            systemAlerts = s.SystemAlerts,
+            totalFaculties = s.TotalFaculties,
+            totalDepartments = s.TotalDepartments,
+            totalPrograms = s.TotalPrograms
         });
     }
 }

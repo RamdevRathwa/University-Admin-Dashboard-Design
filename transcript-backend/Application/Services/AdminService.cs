@@ -405,6 +405,25 @@ public sealed class AdminService : IAdminService
         await _uow.SaveChangesAsync(ct);
     }
 
+    public async Task DeleteCurriculumVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        await EnsurePermissionAsync("curriculum.manage", ct);
+
+        var version = await _repo.GetCurriculumVersionAsync(versionId, ct);
+        if (version is null) throw AppException.NotFound("Curriculum version not found.");
+        if (await _repo.IsCurriculumVersionUsedAsync(versionId, ct))
+            throw new AppException("This curriculum version is already in use and cannot be deleted.", 400, "curriculum_locked");
+
+        await _repo.DeleteCurriculumVersionAsync(versionId, ct);
+        await _repo.AddAuditAsync(NewAudit("DELETE", "CurriculumVersions", versionId.ToString(), null, JsonSerializer.Serialize(new
+        {
+            version.ProgramId,
+            version.AcademicYear,
+            version.VersionName
+        })), ct);
+        await _uow.SaveChangesAsync(ct);
+    }
+
     public async Task<IReadOnlyList<object>> ListCurriculumSubjectsAsync(Guid? versionId, CancellationToken ct = default)
     {
         await EnsurePermissionAsync("curriculum.manage", ct);
@@ -446,8 +465,6 @@ public sealed class AdminService : IAdminService
     {
         await EnsurePermissionAsync("curriculum.manage", ct);
         if (!versionId.HasValue) throw new AppException("VersionId is required.", 400, "validation_error");
-        if (await _repo.IsCurriculumVersionUsedAsync(versionId.Value, ct))
-            throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
 
         var e = ToJsonElement(body);
         var subjectCode = (GetString(e, "subjectCode") ?? string.Empty).Trim();
@@ -504,9 +521,6 @@ public sealed class AdminService : IAdminService
     public async Task DeleteCurriculumSubjectAsync(Guid curriculumSubjectId, CancellationToken ct = default)
     {
         await EnsurePermissionAsync("curriculum.manage", ct);
-        var parentVersionId = await _repo.GetCurriculumVersionIdBySubjectAsync(curriculumSubjectId, ct);
-        if (parentVersionId.HasValue && await _repo.IsCurriculumVersionUsedAsync(parentVersionId.Value, ct))
-            throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
 
         await _repo.SoftDeleteCurriculumSubjectAsync(curriculumSubjectId, ct);
         await _repo.AddAuditAsync(NewAudit("DELETE", "CurriculumSubjects", curriculumSubjectId.ToString(), null, JsonSerializer.Serialize(new { inactive = true })), ct);
@@ -519,8 +533,6 @@ public sealed class AdminService : IAdminService
         if (!sourceVersionId.HasValue) throw new AppException("Source version is required.", 400, "source_version_required");
         if (!targetVersionId.HasValue) throw new AppException("Target version is required.", 400, "target_version_required");
         if (sourceVersionId.Value == targetVersionId.Value) throw new AppException("Source and target versions must be different.", 400, "same_version");
-        if (await _repo.IsCurriculumVersionUsedAsync(targetVersionId.Value, ct))
-            throw new AppException("This curriculum version is already in use and cannot be edited.", 400, "curriculum_locked");
 
         var copied = await _repo.CloneCurriculumSubjectsAsync(sourceVersionId.Value, targetVersionId.Value, ct);
         await _repo.AddAuditAsync(NewAudit("CLONE", "CurriculumSubjects", targetVersionId.Value.ToString(), sourceVersionId.Value.ToString(), JsonSerializer.Serialize(new

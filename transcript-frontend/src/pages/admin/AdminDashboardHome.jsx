@@ -19,9 +19,25 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-function StatCard({ title, value, icon: Icon, hint }) {
+function StatCard({ title, value, icon: Icon, hint, onClick }) {
+  const isClickable = typeof onClick === "function";
   return (
-    <Card className="rounded-xl">
+    <Card
+      className={`rounded-xl ${isClickable ? "cursor-pointer transition hover:-translate-y-px hover:border-blue-300 hover:shadow-md" : ""}`}
+      onClick={onClick}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={
+        isClickable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+    >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-sm font-medium text-gray-600">{title}</CardTitle>
@@ -83,25 +99,12 @@ export default function AdminDashboardHome() {
           adminService.getRecentActivity({ limit: 10 }),
         ]);
 
-        const lookupTasks = [];
-        const lookupKeys = [];
-
-        if (hasPermission("institution.manage")) {
-          lookupTasks.push(adminService.listFaculties(), adminService.listDepartments());
-          lookupKeys.push("faculties", "departments");
-        }
-
-        if (hasPermission("curriculum.manage")) {
-          lookupTasks.push(adminService.listPrograms());
-          lookupKeys.push("programs");
-        }
-
-        const lookupResults = lookupTasks.length ? await Promise.all(lookupTasks) : [];
-        const lookups = Object.fromEntries(lookupKeys.map((key, index) => [key, lookupResults[index]]));
-
-        const fRes = lookups.faculties;
-        const dRes = lookups.departments;
-        const pRes = lookups.programs;
+        const fallbackTasks = [
+          adminService.listFaculties(),
+          adminService.listDepartments(),
+          adminService.listPrograms(),
+        ];
+        const [fRes, dRes, pRes] = await Promise.all(fallbackTasks);
 
         const facultyItems = Array.isArray(fRes?.items) ? fRes.items : Array.isArray(fRes?.faculties) ? fRes.faculties : Array.isArray(fRes) ? fRes : [];
         const departmentItems = Array.isArray(dRes?.items)
@@ -117,9 +120,9 @@ export default function AdminDashboardHome() {
         setSummary(s || null);
         setActivity(Array.isArray(a?.items) ? a.items : Array.isArray(a) ? a : []);
         setVitals({
-          faculties: facultyItems.length,
-          departments: departmentItems.length,
-          programs: programItems.length,
+          faculties: Number(s?.totalFaculties ?? facultyItems.length ?? 0),
+          departments: Number(s?.totalDepartments ?? departmentItems.length ?? 0),
+          programs: Number(s?.totalPrograms ?? programItems.length ?? 0),
         });
       } catch (e) {
         if (!alive) return;
@@ -139,44 +142,56 @@ export default function AdminDashboardHome() {
   const cards = useMemo(() => {
     const s = summary || {};
     return [
-      { title: "Total Students", value: s.totalStudents ?? "—", icon: Users },
-      { title: "Total Staff", value: s.totalStaff ?? "—", icon: UserCog },
-      { title: "Approved Transcripts", value: s.approvedTranscripts ?? "—", icon: CheckCircle2 },
+      {
+        title: "Total Students",
+        value: loading ? "..." : s.totalStudents ?? 0,
+        icon: Users,
+        hint: "Open user management",
+        onClick: () => navigate("/admin/users"),
+      },
+      {
+        title: "Total Staff",
+        value: loading ? "..." : s.totalStaff ?? 0,
+        icon: UserCog,
+        hint: "Open staff and user management",
+        onClick: () => navigate("/admin/users"),
+      },
+      {
+        title: "Approved Transcripts",
+        value: loading ? "..." : s.approvedTranscripts ?? 0,
+        icon: CheckCircle2,
+        hint: "Open transcript management",
+        onClick: () => navigate("/admin/transcripts"),
+      },
     ];
-  }, [summary]);
+  }, [loading, navigate, summary]);
 
   const vitalCards = useMemo(
     () =>
       [
-        hasPermission("institution.manage")
-          ? {
-              title: "Faculty",
-              value: loading ? "..." : vitals.faculties,
-              icon: Building2,
-              hint: "Open faculty management",
-              onClick: () => navigate("/admin/faculty"),
-            }
-          : null,
-        hasPermission("institution.manage")
-          ? {
-              title: "Departments",
-              value: loading ? "..." : vitals.departments,
-              icon: FolderTree,
-              hint: "Manage department records",
-              onClick: () => navigate("/admin/faculty"),
-            }
-          : null,
-        hasPermission("curriculum.manage")
-          ? {
-              title: "Programs",
-              value: loading ? "..." : vitals.programs,
-              icon: BookOpen,
-              hint: "Open program and curriculum",
-              onClick: () => navigate("/admin/curriculum"),
-            }
-          : null,
-      ].filter(Boolean),
-    [hasPermission, loading, navigate, vitals.departments, vitals.faculties, vitals.programs]
+        {
+          title: "Faculty",
+          value: loading ? "..." : vitals.faculties,
+          icon: Building2,
+          hint: "Open faculty management",
+          onClick: () => navigate("/admin/faculty"),
+        },
+        {
+          title: "Departments",
+          value: loading ? "..." : vitals.departments,
+          icon: FolderTree,
+          hint: "Manage department records",
+          onClick: () => navigate("/admin/faculty"),
+        },
+        {
+          title: "Programs",
+          value: loading ? "..." : vitals.programs,
+          icon: BookOpen,
+          hint: "Open program and curriculum",
+          onClick: () => navigate("/admin/curriculum"),
+        },
+      ],
+    [loading, navigate, vitals.departments, vitals.faculties, vitals.programs]
   );
 
   return (
@@ -209,19 +224,9 @@ export default function AdminDashboardHome() {
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {loading
-          ? Array.from({ length: 6 }).map((_, idx) => (
-              <Card key={idx} className="rounded-xl">
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-40" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-24" />
-                  <Skeleton className="h-3 w-20 mt-2" />
-                </CardContent>
-              </Card>
-            ))
-          : cards.map((c) => <StatCard key={c.title} {...c} />)}
+        {cards.map((c) => (
+          <StatCard key={c.title} {...c} />
+        ))}
       </div>
 
       <Card className="rounded-xl">

@@ -107,7 +107,7 @@ export default function CurriculumSubjectsPage() {
     return "/admin/curriculum";
   }, [location.pathname]);
 
-  const locked = subjects.some((item) => item.locked);
+  const locked = false;
   const cloneSourceVersion = useMemo(() => {
     const currentId = String(versionId || "");
     return versions
@@ -375,14 +375,10 @@ export default function CurriculumSubjectsPage() {
         }
       />
 
-      {locked ? (
-        <Alert className="rounded-2xl border-amber-200 bg-amber-50 text-amber-900 shadow-sm">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="font-medium">
-            Read-only mode. This curriculum version is already in use, so subjects can be reviewed here but not changed.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <Alert className="rounded-2xl border-sky-200 bg-sky-50 text-sky-900 shadow-sm">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription className="font-medium">Curriculum editing is enabled for now.</AlertDescription>
+      </Alert>
 
       {error ? (
         <Alert variant="destructive" className="rounded-2xl shadow-sm">
@@ -604,35 +600,38 @@ export default function CurriculumSubjectsPage() {
                 <SelectContent><SelectItem value="false">Core</SelectItem><SelectItem value="true">Elective</SelectItem></SelectContent>
               </Select>
             </div>
-            {form.isElective === "true" && versionInfo.program?.includes("CSE") && (
+            {form.isElective === "true" && (() => {
+              const electiveProgram = versionInfo.programCode || versionInfo.programName || versionInfo.program || "";
+              const options = getElectiveOptions(electiveProgram, { name: form.subjectName, subjectName: form.subjectName });
+              if (!options.length) return null;
+
+              return (
               <div className="space-y-2">
-                <Label>CSE Elective Options</Label>
-                <Select 
+                <Label>Elective Options</Label>
+                <Select
                   onValueChange={(value) => {
-                    const option = getElectiveOptions("BE-CSE", { name: form.subjectName }).find(o => o.value === value);
+                    const option = options.find((item) => item.value === value);
                     if (option) {
-                      setForm((prev) => ({ ...prev, subjectName: option.label }));
+                      setForm((prev) => ({
+                        ...prev,
+                        subjectCode: option.value,
+                        subjectName: option.label,
+                        titleOnTranscript: option.label,
+                      }));
                     }
                   }}
                 >
                   <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select elective from preset" /></SelectTrigger>
-                  <SelectContent className="w-[360px]">
+                  <SelectContent className="w-90">
                     <SelectItem value="">-- Manual Entry --</SelectItem>
-                    {(() => {
-                      const allOptions = [
-                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-I" }),
-                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-II" }),
-                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-III" }),
-                        ...getElectiveOptions("BE-CSE", { name: "Core Elective-IV" }),
-                      ];
-                      return allOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ));
-                    })()}
+                    {options.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
+              );
+            })()}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={form.active} onValueChange={(value) => setForm((prev) => ({ ...prev, active: value }))}>

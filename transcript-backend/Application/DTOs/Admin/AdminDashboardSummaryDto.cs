@@ -6,6 +6,9 @@ public sealed record AdminDashboardSummaryDto(
     int PendingTranscripts,
     int ApprovedTranscripts,
     decimal TotalPaymentsReceived,
-    int SystemAlerts
+    int SystemAlerts,
+    int TotalFaculties,
+    int TotalDepartments,
+    int TotalPrograms
 );
 

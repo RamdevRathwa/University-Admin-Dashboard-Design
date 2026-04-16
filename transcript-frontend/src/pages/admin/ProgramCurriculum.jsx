@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { Skeleton } from "../../components/ui/skeleton";
 import { useToast } from "../../components/ui/use-toast";
 import { adminService } from "../../services/adminService";
-import { BookOpen, Plus } from "lucide-react";
+import { BookOpen, Plus, Trash2 } from "lucide-react";
 import PageHeader from "../../components/shell/PageHeader";
 import EmptyState from "../../components/shell/EmptyState";
 import { useAuth } from "../../context/AuthContext";
@@ -120,14 +120,9 @@ export default function ProgramCurriculum() {
   };
 
   const loadVersions = async (pid) => {
-    if (!pid) {
-      setVersions([]);
-      return;
-    }
-
     setError("");
     try {
-      const res = await adminService.listCurriculumVersions(pid);
+      const res = await adminService.listCurriculumVersions(pid || undefined);
       const list = Array.isArray(res?.items) ? res.items : Array.isArray(res?.versions) ? res.versions : Array.isArray(res) ? res : [];
       setVersions(list);
     } catch (e) {
@@ -170,8 +165,8 @@ export default function ProgramCurriculum() {
     }
 
     const currentProgramExists = filteredPrograms.some((program) => String(program.id || program.programId || "") === String(programId));
-    if (!currentProgramExists) {
-      setProgramId(String(firstProgram.id || firstProgram.programId || ""));
+    if (!currentProgramExists && programId && programId !== "__all__") {
+      setProgramId("");
     }
   }, [filteredPrograms, programId]);
 
@@ -199,6 +194,11 @@ export default function ProgramCurriculum() {
   };
 
   const createVersion = async () => {
+    if (!programId) {
+      toast({ title: "Select a program", description: "Pick a program before creating a curriculum version.", variant: "destructive" });
+      return;
+    }
+
     try {
       await adminService.createCurriculumVersion(programId, newVersion);
       toast({ title: "Curriculum version created" });
@@ -206,6 +206,27 @@ export default function ProgramCurriculum() {
       await loadVersions(programId);
     } catch (e) {
       toast({ title: "Version could not be created", description: e?.message || "Please review the version details and try again.", variant: "destructive" });
+    }
+  };
+
+  const deleteVersion = async (version) => {
+    const versionId = String(version.id || version.versionId || "").trim();
+    if (!versionId) return;
+
+    const versionLabel = `${version.academicYear || version.year || ""}${version.versionName || version.name ? ` ${version.versionName || version.name}` : ""}`.trim();
+    const confirmed = window.confirm(`Delete curriculum version ${versionLabel || versionId}? This will remove its subject mapping.`);
+    if (!confirmed) return;
+
+    try {
+      await adminService.deleteCurriculumVersion(versionId);
+      toast({ title: "Curriculum version deleted" });
+      await loadVersions(programId);
+    } catch (e) {
+      toast({
+        title: "Version could not be deleted",
+        description: e?.message || "This version may already be in use.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -281,11 +302,12 @@ export default function ProgramCurriculum() {
                 <div className="lg:col-span-3">
                   <Label>Program</Label>
                   <div className="mt-1">
-                    <Select value={programId || ""} onValueChange={setProgramId} disabled={!departmentId || filteredPrograms.length === 0}>
+                    <Select value={programId || "__all__"} onValueChange={(value) => setProgramId(value === "__all__" ? "" : value)} disabled={!departmentId || filteredPrograms.length === 0}>
                       <SelectTrigger className="rounded-xl">
                         <SelectValue placeholder="Select program" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__all__">All programs</SelectItem>
                         {filteredPrograms.map((program) => (
                           <SelectItem key={String(program.id || program.programId)} value={String(program.id || program.programId)}>
                             {program.name || program.programName || program.program_code || program.code || "Program"}
@@ -298,7 +320,9 @@ export default function ProgramCurriculum() {
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 lg:col-span-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-gray-900">
-                      {programMap.get(String(programId || ""))?.name || programMap.get(String(programId || ""))?.programName || "-"}
+                      {programId && programId !== "__all__"
+                        ? programMap.get(String(programId || ""))?.name || programMap.get(String(programId || ""))?.programName || "-"
+                        : "All programs"}
                     </p>
                     <p className="truncate text-xs text-gray-500">Create versions per academic year and keep past versions visible.</p>
                   </div>
@@ -370,23 +394,34 @@ export default function ProgramCurriculum() {
                           </TableCell>
                           <TableCell className="text-sm text-gray-600">{version.subjectCount ?? "-"}</TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              className="rounded-xl"
-                              onClick={() =>
-                                navigate(`${curriculumBasePath}/${encodeURIComponent(String(version.id || version.versionId))}/subjects`, {
-                                  state: {
-                                    programName: programMap.get(String(programId || ""))?.name || programMap.get(String(programId || ""))?.programName || "",
-                                    programCode: programMap.get(String(programId || ""))?.code || programMap.get(String(programId || ""))?.programCode || "",
-                                    versionName: version.versionName || version.name || "",
-                                    academicYear: version.academicYear || version.year || "",
-                                    programId,
-                                  },
-                                })
-                              }
-                            >
-                              Manage Subjects
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={() =>
+                                  navigate(`${curriculumBasePath}/${encodeURIComponent(String(version.id || version.versionId))}/subjects`, {
+                                    state: {
+                                      programName: programMap.get(String(programId || ""))?.name || programMap.get(String(programId || ""))?.programName || "",
+                                      programCode: programMap.get(String(programId || ""))?.code || programMap.get(String(programId || ""))?.programCode || "",
+                                      versionName: version.versionName || version.name || "",
+                                      academicYear: version.academicYear || version.year || "",
+                                      programId,
+                                    },
+                                  })
+                                }
+                              >
+                                Manage Subjects
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="rounded-xl border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                                onClick={() => deleteVersion(version)}
+                                title="Delete version"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))

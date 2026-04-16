@@ -35,6 +35,10 @@ public sealed class AdminRepository : IAdminRepository
         var approvedTranscripts = await _db.Transcripts.AsNoTracking().CountAsync(t => (t.IsLocked ?? false), ct);
         var pendingTranscripts = await _db.Transcripts.AsNoTracking().CountAsync(t => (t.IsLocked ?? false) && t.PublishedAt == null, ct);
 
+        var totalFaculties = await _db.Faculties.AsNoTracking().CountAsync(ct);
+        var totalDepartments = await _db.Departments.AsNoTracking().CountAsync(ct);
+        var totalPrograms = await _db.Programs.AsNoTracking().CountAsync(ct);
+
         var totalPaymentsReceived = 0m;
         var systemAlerts = pendingTranscripts;
 
@@ -44,7 +48,10 @@ public sealed class AdminRepository : IAdminRepository
             pendingTranscripts,
             approvedTranscripts,
             totalPaymentsReceived,
-            systemAlerts
+            systemAlerts,
+            totalFaculties,
+            totalDepartments,
+            totalPrograms
         );
     }
 
@@ -764,6 +771,27 @@ public sealed class AdminRepository : IAdminRepository
             CreatedBy = null,
             CreatedAt = version.CreatedAt == default ? DateTimeOffset.UtcNow : version.CreatedAt
         });
+    }
+
+    public async Task DeleteCurriculumVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        var cvId = DecodeInt32Guid(versionId);
+        if (!cvId.HasValue)
+            return;
+
+        var curriculumSubjects = await _db.CurriculumSubjects
+            .Where(x => x.CurriculumVersionId == cvId.Value)
+            .ToListAsync(ct);
+        if (curriculumSubjects.Count > 0)
+        {
+            _db.CurriculumSubjects.RemoveRange(curriculumSubjects);
+        }
+
+        var version = await _db.CurriculumVersions.FirstOrDefaultAsync(x => x.CurriculumVersionId == cvId.Value, ct);
+        if (version is not null)
+        {
+            _db.CurriculumVersions.Remove(version);
+        }
     }
 
     public async Task<bool> IsCurriculumVersionUsedAsync(Guid versionId, CancellationToken ct = default)

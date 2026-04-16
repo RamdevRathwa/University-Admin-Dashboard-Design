@@ -26,6 +26,7 @@ public interface IAdminService
     Task UpsertProgramAsync(object body, CancellationToken ct = default);
     Task<IReadOnlyList<object>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default);
     Task CreateCurriculumVersionAsync(Guid? programId, object body, CancellationToken ct = default);
+    Task DeleteCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
     Task<object> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
     Task<IReadOnlyList<object>> ListCurriculumSubjectsAsync(Guid? versionId, CancellationToken ct = default);
     Task UpsertCurriculumSubjectAsync(Guid? versionId, Guid? curriculumSubjectId, object body, CancellationToken ct = default);

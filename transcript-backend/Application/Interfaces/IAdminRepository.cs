@@ -39,6 +39,7 @@ public interface IAdminRepository
     Task<IReadOnlyList<CurriculumVersion>> ListCurriculumVersionsAsync(Guid? programId, CancellationToken ct = default);
     Task<CurriculumVersion?> GetCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
     Task AddCurriculumVersionAsync(CurriculumVersion version, CancellationToken ct = default);
+    Task DeleteCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
     Task<bool> IsCurriculumVersionUsedAsync(Guid versionId, CancellationToken ct = default);
     Task<IReadOnlyList<CurriculumSubject>> ListCurriculumSubjectsAsync(Guid versionId, CancellationToken ct = default);
     Task<Domain.Entities.Program?> GetProgramByCurriculumVersionAsync(Guid versionId, CancellationToken ct = default);
