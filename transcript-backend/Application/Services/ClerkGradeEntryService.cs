@@ -350,10 +350,12 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
                 var thGrade = (grades.ThGrade ?? string.Empty).Trim();
                 var prGrade = (grades.PrGrade ?? string.Empty).Trim();
 
+                var thApplicableCredits = GradeCalc.ApplicableCredits(thGrade, s.ThCredits);
+                var prApplicableCredits = GradeCalc.ApplicableCredits(prGrade, s.PrCredits);
                 var thGradePoint = s.ThCredits > 0 ? GradeCalc.GradePoint(thGrade) : 0m;
                 var prGradePoint = s.PrCredits > 0 ? GradeCalc.GradePoint(prGrade) : 0m;
-                var thEarned = GradeCalc.Round2(thGradePoint * s.ThCredits);
-                var prEarned = GradeCalc.Round2(prGradePoint * s.PrCredits);
+                var thEarned = GradeCalc.Round2(thGradePoint * thApplicableCredits);
+                var prEarned = GradeCalc.Round2(prGradePoint * prApplicableCredits);
                 var thOutOf = GradeCalc.ToOutOf(s.ThCredits, creditPointScheme);
                 var prOutOf = GradeCalc.ToOutOf(s.PrCredits, creditPointScheme);
 
@@ -365,8 +367,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
                     electiveSelections.GetValueOrDefault(s.Id),
                     s.ThHours,
                     s.PrHours,
-                    s.ThCredits,
-                    s.PrCredits,
+                    thApplicableCredits,
+                    prApplicableCredits,
                     creditPointScheme,
                     thGrade,
                     prGrade,
@@ -380,8 +382,8 @@ public sealed class ClerkGradeEntryService : IClerkGradeEntryService
 
                 semester.ThHours += s.ThHours;
                 semester.PrHours += s.PrHours;
-                semester.ThCredits += s.ThCredits;
-                semester.PrCredits += s.PrCredits;
+                semester.ThCredits += thApplicableCredits;
+                semester.PrCredits += prApplicableCredits;
                 semester.ThGradePointsSum += thGradePoint;
                 semester.PrGradePointsSum += prGradePoint;
                 semester.ThEarned += thEarned;

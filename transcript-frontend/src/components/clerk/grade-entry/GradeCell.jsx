@@ -41,6 +41,7 @@ export default function GradeCell({
         <SelectValue placeholder={ph} />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value="NA">Not Applicable</SelectItem>
         {GRADE_OPTIONS.map((g) => (
           <SelectItem key={g} value={g}>
             {g}

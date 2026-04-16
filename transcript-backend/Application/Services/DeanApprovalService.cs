@@ -162,10 +162,12 @@ public sealed class DeanApprovalService : IDeanApprovalService
                     var thGrade = (ge?.ThGrade ?? string.Empty).Trim();
                     var prGrade = (ge?.PrGrade ?? string.Empty).Trim();
 
+                    var thApplicableCredits = GradeCalc.ApplicableCredits(thGrade, s.ThCredits);
+                    var prApplicableCredits = GradeCalc.ApplicableCredits(prGrade, s.PrCredits);
                     var thGp = GradeCalc.GradePoint(thGrade);
                     var prGp = GradeCalc.GradePoint(prGrade);
-                    var thEarned = GradeCalc.Round2(s.ThCredits * thGp);
-                    var prEarned = GradeCalc.Round2(s.PrCredits * prGp);
+                    var thEarned = GradeCalc.Round2(thApplicableCredits * thGp);
+                    var prEarned = GradeCalc.Round2(prApplicableCredits * prGp);
 
                     sem.Subjects.Add(new TranscriptSubjectSnapshot
                     {
@@ -176,8 +178,8 @@ public sealed class DeanApprovalService : IDeanApprovalService
                         SubjectCode = (s.SubjectCode ?? string.Empty).Trim(),
                         ThHours = s.ThHours,
                         PrHours = s.PrHours,
-                        ThCredits = s.ThCredits,
-                        PrCredits = s.PrCredits,
+                        ThCredits = thApplicableCredits,
+                        PrCredits = prApplicableCredits,
                         ThGrade = thGrade,
                         PrGrade = prGrade,
                         ThGradePoint = thGp,
@@ -220,7 +222,7 @@ public sealed class DeanApprovalService : IDeanApprovalService
 
         var totalCredits = semesters.Sum(x => x.ThCreditsTotal + x.PrCreditsTotal);
         var totalEarned = semesters.Sum(x => x.ThEarnedTotal + x.PrEarnedTotal);
-        transcript.CGPA = totalCredits <= 0 ? 0m : GradeCalc.Round2(totalEarned / totalCredits);
+            transcript.CGPA = totalCredits <= 0 ? 0m : GradeCalc.Round2(totalEarned / totalCredits);
 
         await _transcripts.AddAsync(transcript, ct);
 
@@ -459,10 +461,12 @@ public sealed class DeanApprovalService : IDeanApprovalService
                 var thGrade = (grades.ThGrade ?? string.Empty).Trim();
                 var prGrade = (grades.PrGrade ?? string.Empty).Trim();
 
+                var thApplicableCredits = GradeCalc.ApplicableCredits(thGrade, s.ThCredits);
+                var prApplicableCredits = GradeCalc.ApplicableCredits(prGrade, s.PrCredits);
                 var thGradePoint = s.ThCredits > 0 ? GradeCalc.GradePoint(thGrade) : 0m;
                 var prGradePoint = s.PrCredits > 0 ? GradeCalc.GradePoint(prGrade) : 0m;
-                var thEarned = GradeCalc.Round2(thGradePoint * s.ThCredits);
-                var prEarned = GradeCalc.Round2(prGradePoint * s.PrCredits);
+                var thEarned = GradeCalc.Round2(thGradePoint * thApplicableCredits);
+                var prEarned = GradeCalc.Round2(prGradePoint * prApplicableCredits);
                 var thOutOf = GradeCalc.ToOutOf(s.ThCredits, creditPointScheme);
                 var prOutOf = GradeCalc.ToOutOf(s.PrCredits, creditPointScheme);
 
@@ -489,8 +493,8 @@ public sealed class DeanApprovalService : IDeanApprovalService
 
                 semester.ThHours += s.ThHours;
                 semester.PrHours += s.PrHours;
-                semester.ThCredits += s.ThCredits;
-                semester.PrCredits += s.PrCredits;
+                semester.ThCredits += thApplicableCredits;
+                semester.PrCredits += prApplicableCredits;
                 semester.ThGradePointsSum += thGradePoint;
                 semester.PrGradePointsSum += prGradePoint;
                 semester.ThEarned += thEarned;

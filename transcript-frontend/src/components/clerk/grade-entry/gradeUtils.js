@@ -15,8 +15,15 @@ export const GRADE_POINTS = {
 
 export function getGradePoint(grade) {
   if (!grade) return null;
-  const gp = GRADE_POINTS[String(grade).trim()];
+  const normalized = String(grade).trim().toUpperCase();
+  if (normalized === "NA" || normalized === "N/A") return null;
+  const gp = GRADE_POINTS[normalized];
   return Number.isFinite(gp) ? gp : null;
+}
+
+export function isNotApplicableGrade(grade) {
+  const normalized = String(grade ?? "").trim().toUpperCase();
+  return normalized === "NA" || normalized === "N/A";
 }
 
 export function getTotalCredits(row) {
@@ -58,8 +65,11 @@ export function calcSummary(subjects, gradesByCode) {
 
   (subjects || []).forEach((s) => {
     const tc = getTotalCredits(s);
+    const grade = gradesByCode?.[s.code];
+    if (isNotApplicableGrade(grade)) return;
+
     totalCredits += tc;
-    const gp = getGradePoint(gradesByCode?.[s.code]);
+    const gp = getGradePoint(grade);
     totalEarned += getEarnedGradePoints(gp ?? 0, tc);
   });
 
@@ -73,14 +83,21 @@ export function calcSummary(subjects, gradesByCode) {
 
 export function calcCgpa(current, previousSemesters) {
   const prev = Array.isArray(previousSemesters) ? previousSemesters : [];
-  const prevCredits = prev.reduce((a, s) => a + (Number(s?.credits) || 0), 0);
-  const prevEarned = prev.reduce((a, s) => a + (Number(s?.credits) || 0) * (Number(s?.sgpa) || 0), 0);
+  const prevCredits = prev.reduce((a, s) => {
+    if (s?.notApplicable) return a;
+    return a + (Number(s?.credits) || 0);
+  }, 0);
+  const prevEarned = prev.reduce((a, s) => {
+    if (s?.notApplicable) return a;
+    return a + (Number(s?.credits) || 0) * (Number(s?.sgpa) || 0);
+  }, 0);
 
   const curCredits = Number(current?.totalCredits) || 0;
   const curEarned = Number(current?.totalEarned) || 0;
+  const currentNotApplicable = Boolean(current?.notApplicable);
 
-  const totalCredits = prevCredits + curCredits;
-  const totalEarned = prevEarned + curEarned;
+  const totalCredits = prevCredits + (currentNotApplicable ? 0 : curCredits);
+  const totalEarned = prevEarned + (currentNotApplicable ? 0 : curEarned);
   if (totalCredits <= 0) return 0;
   return round2(totalEarned / totalCredits);
 }

@@ -605,8 +605,10 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         private decimal CalculateCumulativeCGPA(List<TranscriptSemesterSnapshot> semesters)
         {
             if (semesters.Count == 0) return 0;
-            var sumSGPA = semesters.Sum(s => s.SGPA);
-            return sumSGPA / semesters.Count;
+            var totalCredits = semesters.Sum(s => s.ThCreditsTotal + s.PrCreditsTotal);
+            if (totalCredits <= 0) return 0;
+            var totalEarned = semesters.Sum(s => s.ThEarnedTotal + s.PrEarnedTotal);
+            return GradeCalc.Round2(totalEarned / totalCredits);
         }
 
         private decimal CalculateCumulativePercentage(List<TranscriptSemesterSnapshot> semesters)

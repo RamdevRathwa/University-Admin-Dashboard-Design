@@ -4,6 +4,12 @@ namespace Application.Common;
 
 public static class GradeCalc
 {
+    public static bool IsNotApplicable(string grade)
+    {
+        var g = (grade ?? string.Empty).Trim().ToUpperInvariant();
+        return g is "NA" or "N/A";
+    }
+
     public static decimal GradePoint(string grade)
     {
         var g = (grade ?? string.Empty).Trim().ToUpperInvariant();
@@ -21,6 +27,8 @@ public static class GradeCalc
             "F" => 0m,
             "-" => 0m,
             "--" => 0m,
+            "NA" => 0m,
+            "N/A" => 0m,
             "" => 0m,
             _ => 0m
         };
@@ -32,6 +40,12 @@ public static class GradeCalc
         var normalized = (grade ?? string.Empty).Trim();
         return string.IsNullOrWhiteSpace(normalized) || normalized == "-" || normalized == "--";
     }
+
+    public static decimal ApplicableCredits(string grade, decimal credits)
+        => IsNotApplicable(grade) ? 0m : credits;
+
+    public static decimal EarnedPoints(string grade, decimal credits)
+        => Round2(ApplicableCredits(grade, credits) * GradePoint(grade));
 
     public static string GradeFromGp(decimal gp)
     {
