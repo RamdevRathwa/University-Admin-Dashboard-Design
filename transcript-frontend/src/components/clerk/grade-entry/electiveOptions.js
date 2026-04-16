@@ -102,6 +102,24 @@ const CSE_CORE_ELECTIVE_4 = [
   { value: "CSE1806", label: "CSE1806 - CV - Computer Vision" },
 ];
 
+const CSE_BE3_SEM2_MINOR_ELECTIVE_1 = [
+  { value: "CSE1605", label: "CSE1605 - .NET Technologies" },
+  { value: "CSE1606", label: "CSE1606 - Advance Java Technologies" },
+];
+
+const CSE_BE3_SEM2_INSTITUTE_ELECTIVE_1 = [
+  { value: "AMT1682IECS", label: "AMT1682IECS - Advance statistical Software" },
+  { value: "ELE1682IECS", label: "ELE1682IECS - Wireless communications and Networking" },
+  { value: "ARC1681IECS", label: "ARC1681IECS - Fundamentals of Sustainable Building Design" },
+  { value: "ARC1682IECS", label: "ARC1682IECS - Innovative Product Design and Development" },
+  { value: "TXC1681IECS", label: "TXC1681IECS - Natural Resources for Textiles" },
+  { value: "APH1681IECS", label: "APH1681IECS - Nanotechnology and its Applications" },
+  { value: "WRE1681IECS", label: "WRE1681IECS - Water Conservation Concepts" },
+  { value: "APH1682IECS", label: "APH1682IECS - Space Technology" },
+  { value: "CHL1682IECS", label: "CHL1682IECS - Plastic Waste Management" },
+  { value: "MEC1682IECS", label: "MEC1682IECS - Robotics Engineering" },
+];
+
 export function getElectiveOptions(program, subject) {
   const programCode = normalize(program);
   // Extract subject name from various possible property names
@@ -156,12 +174,21 @@ export function getElectiveOptions(program, subject) {
     }
     
     // Handle institute and minor electives for CSE
-    if (subjectName.includes("INST.ELECTIVE")) {
-      return []; // To be defined if needed
+    if (
+      subjectName.includes("INST.ELECTIVE") ||
+      subjectName.includes("INSTITUTE ELECTIVE") ||
+      subjectName.includes("INSTITUTE.ELECTIVE")
+    ) {
+      return CSE_BE3_SEM2_INSTITUTE_ELECTIVE_1;
     }
     
-    if (subjectName.includes("MINOR ELECTIVE")) {
-      return []; // To be defined if needed
+    if (
+      subjectName.includes("MINOR ELECTIVE") ||
+      subjectName.includes("PROGRAMMING ELECTIVE-I") ||
+      subjectName.includes("PROGRAMMING ELECTIVE I") ||
+      subjectName.includes("PROGRAMMING.ELECTIVE-I")
+    ) {
+      return CSE_BE3_SEM2_MINOR_ELECTIVE_1;
     }
   }
 
