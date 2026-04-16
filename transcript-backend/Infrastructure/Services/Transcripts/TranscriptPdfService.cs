@@ -419,9 +419,8 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                 void BodyCell(string text, bool left = false)
                 {
                     var cell = t.Cell().Border(1).Padding(2).AlignMiddle();
-                    var displayText = string.IsNullOrWhiteSpace(text) ? "-" : text;
-                    if (left) cell.AlignLeft().Text(displayText).FontSize(8.5f);
-                    else cell.AlignCenter().Text(displayText).FontSize(8.5f);
+                    if (left) cell.AlignLeft().Text(text).FontSize(8.5f);
+                    else cell.AlignCenter().Text(text).FontSize(8.5f);
                 }
 
                 foreach (var s in subjects)
