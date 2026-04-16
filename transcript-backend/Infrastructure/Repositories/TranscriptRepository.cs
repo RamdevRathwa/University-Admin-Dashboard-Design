@@ -58,6 +58,11 @@ public sealed class TranscriptRepository : ITranscriptRepository
                 .ThenBy(x => x.Sn)
                 .ToListAsync(ct);
 
+        var prn = (studentUser.StudentProfile?.PRN ?? string.Empty).Trim().ToUpperInvariant();
+        var electiveSubjectOverrides = await LoadElectiveSubjectOverridesAsync(row.CurriculumVersionId, prn, ct);
+        var electiveFallbackBySemester = await LoadElectiveSubjectFallbacksAsync(row.CurriculumVersionId, prn, ct);
+        var electiveFallbackCursorBySemester = new Dictionary<int, int>();
+
         var semesters = semRows.Select(s =>
         {
             var sem = new TranscriptSemesterSnapshot
@@ -85,14 +90,36 @@ public sealed class TranscriptRepository : ITranscriptRepository
                 EGP = s.Egp
             };
 
-            var subjects = subjRows
+            var subjects = new List<TranscriptSubjectSnapshot>();
+            var semesterSubjRows = subjRows
                 .Where(x => x.TranscriptSemesterSnapshotId == s.TranscriptSemesterSnapshotId)
-                .Select(x => new TranscriptSubjectSnapshot
+                .ToList();
+
+            foreach (var x in semesterSubjRows)
+            {
+                var subjectName = x.SubjectName;
+                if (electiveSubjectOverrides.TryGetValue(BuildElectiveOverrideKey(s.SemesterNumber, x.SubjectCode), out var selectedElectiveName))
+                {
+                    subjectName = selectedElectiveName;
+                }
+                else if (IsElectivePlaceholderName(subjectName) &&
+                         electiveFallbackBySemester.TryGetValue(s.SemesterNumber, out var fallbackValues) &&
+                         fallbackValues.Count > 0)
+                {
+                    var nextIndex = electiveFallbackCursorBySemester.TryGetValue(s.SemesterNumber, out var idx) ? idx : 0;
+                    if (nextIndex < fallbackValues.Count)
+                    {
+                        subjectName = fallbackValues[nextIndex];
+                        electiveFallbackCursorBySemester[s.SemesterNumber] = nextIndex + 1;
+                    }
+                }
+
+                subjects.Add(new TranscriptSubjectSnapshot
                 {
                     Id = Guid.NewGuid(),
                     TranscriptSemesterSnapshotId = sem.Id,
                     SN = x.Sn,
-                    SubjectName = x.SubjectName,
+                    SubjectName = subjectName,
                     SubjectCode = x.SubjectCode,
                     ThHours = x.ThHours,
                     PrHours = x.PrHours,
@@ -104,13 +131,14 @@ public sealed class TranscriptRepository : ITranscriptRepository
                     PrGradePoint = x.PrGradePoint,
                     ThEarned = x.ThEarned,
                     PrEarned = x.PrEarned
-                }).ToList();
+                });
+            }
 
             sem.Subjects = subjects;
             return sem;
         }).ToList();
 
-        semesters = await AppendMissingCurriculumSemestersAsync(id, row, studentUser, semesters, ct);
+        semesters = await AppendMissingCurriculumSemestersAsync(id, row, studentUser, semesters, prn, ct);
 
         var semFrom = semesters.Count == 0 ? 0 : semesters.Min(x => x.SemesterNumber);
         var semTo = semesters.Count == 0 ? 0 : semesters.Max(x => x.SemesterNumber);
@@ -453,6 +481,7 @@ public sealed class TranscriptRepository : ITranscriptRepository
         V2Transcript transcriptRow,
         User studentUser,
         List<TranscriptSemesterSnapshot> existingSemesters,
+        string prn,
         CancellationToken ct)
     {
         var profile = studentUser.StudentProfile;
@@ -460,15 +489,22 @@ public sealed class TranscriptRepository : ITranscriptRepository
             .OrderBy(x => x.SemesterNumber)
             .ToDictionary(x => x.SemesterNumber);
 
+        // Load elective selections
+        var electiveSelections = await LoadElectiveSelectionsAsync(prn, ct);
+
         var curriculumRows = await (
             from cs in _db.CurriculumSubjects.AsNoTracking()
             join sv in _db.SubjectVersions.AsNoTracking() on cs.SubjectVersionId equals sv.SubjectVersionId
             join subj in _db.Subjects.AsNoTracking() on sv.SubjectId equals subj.SubjectId
+            join map in _db.MapCurriculumSubjects.AsNoTracking() on cs.CurriculumSubjectId equals map.CurriculumSubjectId into mapGroup
+            from map in mapGroup.DefaultIfEmpty()
             where cs.CurriculumVersionId == transcriptRow.CurriculumVersionId && cs.IsActive
             orderby cs.SemesterNumber, cs.DisplayOrder, subj.SubjectCode
             select new
             {
                 cs.CurriculumSubjectId,
+                LegacyCurriculumSubjectGuid = map != null ? (Guid?)map.LegacyCurriculumSubjectGuid : null,
+                cs.IsElective,
                 SemesterNumber = (int)cs.SemesterNumber,
                 SubjectCode = subj.SubjectCode,
                 SubjectName = string.IsNullOrWhiteSpace(sv.TitleOnTranscript) ? subj.SubjectName : sv.TitleOnTranscript,
@@ -517,13 +553,20 @@ public sealed class TranscriptRepository : ITranscriptRepository
                 var thEarned = GradeCalc.Round2(row.ThCredits * thGp);
                 var prEarned = GradeCalc.Round2(row.PrCredits * prGp);
 
+                // For elective subjects, use the selected elective name if available
+                var subjectName = row.SubjectName;
+                if (row.LegacyCurriculumSubjectGuid.HasValue && electiveSelections.TryGetValue(row.LegacyCurriculumSubjectGuid.Value, out var selectedElective))
+                {
+                    subjectName = selectedElective;
+                }
+
                 sem.Subjects.Add(new TranscriptSubjectSnapshot
                 {
                     Id = Guid.NewGuid(),
                     TranscriptSemesterSnapshotId = sem.Id,
                     SN = sn++,
                     SubjectCode = row.SubjectCode,
-                    SubjectName = row.SubjectName,
+                    SubjectName = subjectName,
                     ThHours = row.ThHoursPerWeek,
                     PrHours = row.PrHoursPerWeek,
                     ThCredits = row.ThCredits,
@@ -568,6 +611,210 @@ public sealed class TranscriptRepository : ITranscriptRepository
 
         return current.Values.OrderBy(x => x.SemesterNumber).ToList();
     }
+
+    private async Task<Dictionary<Guid, string>> LoadElectiveSelectionsAsync(string prn, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(prn))
+            return new Dictionary<Guid, string>();
+
+        var settingKey = $"grade_entry_electives:{prn.Trim().ToUpperInvariant()}";
+        var setting = await _db.SystemSettings.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SettingKey == settingKey, ct);
+
+        if (setting is null || string.IsNullOrWhiteSpace(setting.SettingValue))
+            return new Dictionary<Guid, string>();
+
+        try
+        {
+            var result = System.Text.Json.JsonSerializer.Deserialize<Dictionary<Guid, string>>(setting.SettingValue);
+            return result ?? new Dictionary<Guid, string>();
+        }
+        catch
+        {
+            return new Dictionary<Guid, string>();
+        }
+    }
+
+    private async Task<Dictionary<string, string>> LoadElectiveSubjectOverridesAsync(long curriculumVersionId, string prn, CancellationToken ct)
+    {
+        var electiveSelections = await LoadElectiveSelectionsAsync(prn, ct);
+        if (electiveSelections.Count == 0)
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var selectedLegacyGuids = electiveSelections.Keys.ToList();
+        if (selectedLegacyGuids.Count == 0)
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var selectedValues = electiveSelections.Values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var selectedCodes = selectedValues
+            .Select(v => v.Split('-', 2, StringSplitOptions.TrimEntries)[0].Trim())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var subjectNameByCode = selectedCodes.Count == 0
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : await _db.Subjects.AsNoTracking()
+                .Where(s => selectedCodes.Contains(s.SubjectCode))
+                .ToDictionaryAsync(s => s.SubjectCode, s => s.SubjectName, StringComparer.OrdinalIgnoreCase, ct);
+
+        var curriculumElectives = await (
+            from cs in _db.CurriculumSubjects.AsNoTracking()
+            join sv in _db.SubjectVersions.AsNoTracking() on cs.SubjectVersionId equals sv.SubjectVersionId
+            join subj in _db.Subjects.AsNoTracking() on sv.SubjectId equals subj.SubjectId
+            join map in _db.MapCurriculumSubjects.AsNoTracking() on cs.CurriculumSubjectId equals map.CurriculumSubjectId into mapGroup
+            from map in mapGroup.DefaultIfEmpty()
+            where map != null && selectedLegacyGuids.Contains(map.LegacyCurriculumSubjectGuid)
+            select new
+            {
+                SemesterNumber = (int)cs.SemesterNumber,
+                SubjectCode = subj.SubjectCode,
+                LegacyCurriculumSubjectGuid = map != null ? (Guid?)map.LegacyCurriculumSubjectGuid : null
+            })
+            .ToListAsync(ct);
+
+        var overrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in curriculumElectives)
+        {
+            if (!item.LegacyCurriculumSubjectGuid.HasValue)
+                continue;
+
+            if (!electiveSelections.TryGetValue(item.LegacyCurriculumSubjectGuid.Value, out var selectedName))
+                continue;
+
+            if (string.IsNullOrWhiteSpace(selectedName))
+                continue;
+
+            var displayName = NormalizeElectiveDisplayName(selectedName, subjectNameByCode);
+            if (string.IsNullOrWhiteSpace(displayName))
+                continue;
+
+            overrides[BuildElectiveOverrideKey(item.SemesterNumber, item.SubjectCode)] = displayName;
+        }
+
+        return overrides;
+    }
+
+    private async Task<Dictionary<int, List<string>>> LoadElectiveSubjectFallbacksAsync(long curriculumVersionId, string prn, CancellationToken ct)
+    {
+        var electiveSelections = await LoadElectiveSelectionsAsync(prn, ct);
+        if (electiveSelections.Count == 0)
+            return new Dictionary<int, List<string>>();
+
+        var selectedLegacyGuids = electiveSelections.Keys.ToList();
+        if (selectedLegacyGuids.Count == 0)
+            return new Dictionary<int, List<string>>();
+
+        var selectedValues = electiveSelections.Values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var selectedCodes = selectedValues
+            .Select(v => v.Split('-', 2, StringSplitOptions.TrimEntries)[0].Trim())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var subjectNameByCode = selectedCodes.Count == 0
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : await _db.Subjects.AsNoTracking()
+                .Where(s => selectedCodes.Contains(s.SubjectCode))
+                .ToDictionaryAsync(s => s.SubjectCode, s => s.SubjectName, StringComparer.OrdinalIgnoreCase, ct);
+
+        var curriculumElectives = await (
+            from cs in _db.CurriculumSubjects.AsNoTracking()
+            join map in _db.MapCurriculumSubjects.AsNoTracking() on cs.CurriculumSubjectId equals map.CurriculumSubjectId into mapGroup
+            from map in mapGroup.DefaultIfEmpty()
+            where map != null && selectedLegacyGuids.Contains(map.LegacyCurriculumSubjectGuid)
+            orderby cs.SemesterNumber, cs.DisplayOrder
+            select new
+            {
+                SemesterNumber = (int)cs.SemesterNumber,
+                LegacyCurriculumSubjectGuid = map != null ? (Guid?)map.LegacyCurriculumSubjectGuid : null
+            })
+            .ToListAsync(ct);
+
+        var result = new Dictionary<int, List<string>>();
+        foreach (var item in curriculumElectives)
+        {
+            if (!item.LegacyCurriculumSubjectGuid.HasValue)
+                continue;
+
+            if (!electiveSelections.TryGetValue(item.LegacyCurriculumSubjectGuid.Value, out var selectedName))
+                continue;
+
+            var displayName = NormalizeElectiveDisplayName(selectedName, subjectNameByCode);
+            if (string.IsNullOrWhiteSpace(displayName))
+                continue;
+
+            if (!result.TryGetValue(item.SemesterNumber, out var list))
+            {
+                list = new List<string>();
+                result[item.SemesterNumber] = list;
+            }
+
+            list.Add(displayName);
+        }
+
+        return result;
+    }
+
+    private static string NormalizeElectiveDisplayName(string rawValue, IReadOnlyDictionary<string, string> subjectNames)
+    {
+        var cleaned = (rawValue ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(cleaned))
+            return string.Empty;
+
+        // If value is code-only, return the subject name only.
+        if (subjectNames.TryGetValue(cleaned, out var nameFromCode) && !string.IsNullOrWhiteSpace(nameFromCode))
+            return StripElectivePrefix(nameFromCode);
+
+        // If value is in "CODE - Name" form, return only the name part.
+        var dashed = cleaned.Split(" - ", 2, StringSplitOptions.TrimEntries);
+        if (dashed.Length == 2 && !string.IsNullOrWhiteSpace(dashed[1]))
+            return dashed[1];
+
+        // Secondary fallback for mixed separators.
+        var code = cleaned.Split('-', 2, StringSplitOptions.TrimEntries)[0].Trim();
+        if (!string.IsNullOrWhiteSpace(code) && subjectNames.TryGetValue(code, out var mappedName) && !string.IsNullOrWhiteSpace(mappedName))
+            return StripElectivePrefix(mappedName);
+
+        return StripElectivePrefix(cleaned);
+    }
+
+    private static string StripElectivePrefix(string value)
+    {
+        var text = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        // Convert formats like "ML - Machine Learning" to "Machine Learning".
+        var parts = text.Split(" - ", 2, StringSplitOptions.TrimEntries);
+        if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[1]))
+            return parts[1].Trim();
+
+        return text;
+    }
+
+    private static bool IsElectivePlaceholderName(string? subjectName)
+    {
+        var name = (subjectName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        return name.Contains("elective", StringComparison.OrdinalIgnoreCase)
+            && (name.Contains('<') || name.Contains("as per student", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string BuildElectiveOverrideKey(int semesterNumber, string? subjectCode)
+        => $"{semesterNumber}|{(subjectCode ?? string.Empty).Trim().ToUpperInvariant()}";
 
     private static string BuildYearTitle(string program, int semesterNumber)
     {

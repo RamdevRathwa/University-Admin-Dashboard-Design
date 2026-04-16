@@ -138,8 +138,6 @@ export default function DeanDashboardHome() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Request No</TableHead>
-                      <TableHead>Student</TableHead>
-                      <TableHead>PRN</TableHead>
                       <TableHead>Program</TableHead>
                       <TableHead>Submitted</TableHead>
                       <TableHead>Status</TableHead>
@@ -150,8 +148,6 @@ export default function DeanDashboardHome() {
                     {recentRows.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell className="font-medium text-gray-900">{String(row.id || "").slice(0, 8).toUpperCase()}</TableCell>
-                        <TableCell className="font-medium text-gray-900">{row.studentName || "-"}</TableCell>
-                        <TableCell className="tabular-nums">{row.prn || "-"}</TableCell>
                         <TableCell>{row.program || "-"}</TableCell>
                         <TableCell className="text-gray-600">{formatDateTime(row.submittedAt)}</TableCell>
                         <TableCell>

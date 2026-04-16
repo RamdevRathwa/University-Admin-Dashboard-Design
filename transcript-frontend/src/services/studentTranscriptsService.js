@@ -22,6 +22,7 @@ export const studentTranscriptsService = {
     if (!token) throw new Error("Not authenticated");
 
     const base = API_BASE_URL || window.location.origin;
-    return `${base}/api/student/transcripts/${encodeURIComponent(id)}/download?access_token=${encodeURIComponent(token)}`;
+    const cacheBust = Date.now();
+    return `${base}/api/student/transcripts/${encodeURIComponent(id)}/download?access_token=${encodeURIComponent(token)}&v=${cacheBust}`;
   },
 };

@@ -235,13 +235,25 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
 
                 col.Item().Element(x => PersonalDetails(x, profile, studentName));
 
-                col.Item().AlignRight().Element(CreditPointSchemeBox);
-
                 col.Item().Text("The details of the Academic Progress Record is as under :").FontSize(10);
 
-                foreach (var sem in _t.Semesters.OrderBy(x => x.SemesterNumber))
+                // Keep this line on the first page, then start semester tables on next page.
+                col.Item().PageBreak();
+
+                var semestersList = _t.Semesters.OrderBy(x => x.SemesterNumber).ToList();
+                for (var idx = 0; idx < semestersList.Count; idx++)
                 {
-                    col.Item().Element(x => SemesterBlock(x, sem));
+                    // Keep transcript tables year-wise: two semesters per page.
+                    if (idx > 0 && idx % 2 == 0)
+                        col.Item().PageBreak();
+
+                    var sem = semestersList[idx];
+                    var cumulativeSemestersUpTo = semestersList.Take(idx + 1).ToList();
+                    var cumulativeCGPA = CalculateCumulativeCGPA(cumulativeSemestersUpTo);
+                    var cumulativePercentage = CalculateCumulativePercentage(cumulativeSemestersUpTo);
+                    var cumulativeEGP = CalculateCumulativeEGP(cumulativeSemestersUpTo);
+                    var cumulativeGrade = DetermineGrade(cumulativePercentage);
+                    col.Item().Element(x => SemesterBlock(x, sem, cumulativeCGPA, cumulativePercentage, cumulativeEGP, cumulativeGrade));
                 }
 
                 col.Item().PageBreak();
@@ -254,7 +266,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
             // Simple two-column layout like the official print (number + label : value)
             c.Column(col =>
             {
-                col.Spacing(2);
+                col.Spacing(8);
                 DetailRow(col, "1", "Permanent Registration No.", p?.PRN ?? "");
                 DetailRow(col, "2", "Full Name", fullName);
                 DetailRow(col, "3", "Nationality", p?.Nationality ?? "");
@@ -310,7 +322,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
 
         private static void DetailRow(ColumnDescriptor col, string no, string label, string value)
         {
-            col.Item().Row(r =>
+            col.Item().PaddingBottom(2).Row(r =>
             {
                 r.ConstantItem(18).Text(no).FontSize(9.5f);
                 r.ConstantItem(175).Text($"{label} :").FontSize(9.5f);
@@ -318,24 +330,7 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
             });
         }
 
-        private void CreditPointSchemeBox(IContainer c)
-        {
-            c.Table(t =>
-            {
-                t.ColumnsDefinition(cols =>
-                {
-                    cols.ConstantColumn(40);
-                    cols.ConstantColumn(140);
-                    cols.ConstantColumn(40);
-                });
-
-                t.Cell().Border(1).Padding(4).AlignCenter().Text(_t.Semesters.FirstOrDefault()?.CreditPointScheme.ToString() ?? "10");
-                t.Cell().Border(1).Padding(4).AlignCenter().Text("Credit Point Scheme").FontSize(9);
-                t.Cell().Border(1).Padding(4).AlignCenter().Text(_t.Semesters.FirstOrDefault()?.CreditPointScheme.ToString() ?? "10");
-            });
-        }
-
-        private void SemesterBlock(IContainer c, TranscriptSemesterSnapshot sem)
+        private void SemesterBlock(IContainer c, TranscriptSemesterSnapshot sem, decimal cumulativeCGPA, decimal cumulativePercentage, decimal cumulativeEGP, string cumulativeGrade)
         {
             c.Column(col =>
             {
@@ -344,11 +339,11 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                 col.Item().AlignCenter().Text(sem.YearTitle).SemiBold();
                 col.Item().Text(sem.TermTitle).SemiBold().FontSize(10);
 
-                col.Item().Element(x => SemesterTable(x, sem));
+                col.Item().Element(x => SemesterTable(x, sem, cumulativeCGPA, cumulativePercentage, cumulativeEGP, cumulativeGrade));
             });
         }
 
-        private void SemesterTable(IContainer c, TranscriptSemesterSnapshot sem)
+        private void SemesterTable(IContainer c, TranscriptSemesterSnapshot sem, decimal cumulativeCGPA, decimal cumulativePercentage, decimal cumulativeEGP, string cumulativeGrade)
         {
             var subjects = sem.Subjects.OrderBy(x => x.SN).ToList();
             var padTo = 8;
@@ -424,8 +419,9 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                 void BodyCell(string text, bool left = false)
                 {
                     var cell = t.Cell().Border(1).Padding(2).AlignMiddle();
-                    if (left) cell.AlignLeft().Text(text).FontSize(8.5f);
-                    else cell.AlignCenter().Text(text).FontSize(8.5f);
+                    var displayText = string.IsNullOrWhiteSpace(text) ? "-" : text;
+                    if (left) cell.AlignLeft().Text(displayText).FontSize(8.5f);
+                    else cell.AlignCenter().Text(displayText).FontSize(8.5f);
                 }
 
                 foreach (var s in subjects)
@@ -473,15 +469,29 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("SGPA").SemiBold().FontSize(8.5f);
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(sem.SGPA)).FontSize(8.5f);
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("Grade").SemiBold().FontSize(8.5f);
-                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(sem.SemesterGrade).FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(DetermineGrade(sem.Percentage)).FontSize(8.5f);
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("Result=").SemiBold().FontSize(8.5f);
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(sem.Result).FontSize(8.5f);
 
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("").FontSize(8.5f);
                 t.Cell().ColumnSpan(4).Border(1).Padding(2).AlignCenter().Text("Percentage").SemiBold().FontSize(8.5f);
-                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(sem.Percentage)).FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(Math.Round(sem.Percentage, 2))).FontSize(8.5f);
                 t.Cell().ColumnSpan(4).Border(1).Padding(2).AlignCenter().Text("EGP").SemiBold().FontSize(8.5f);
                 t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(sem.EGP)).FontSize(8.5f);
+
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("Cumulative").SemiBold().FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("CGPA").SemiBold().FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(cumulativeCGPA)).FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("Grade").SemiBold().FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(cumulativeGrade).FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("").FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("").FontSize(8.5f);
+
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text("").FontSize(8.5f);
+                t.Cell().ColumnSpan(4).Border(1).Padding(2).AlignCenter().Text("Percentage").SemiBold().FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(Math.Round(cumulativePercentage, 2))).FontSize(8.5f);
+                t.Cell().ColumnSpan(4).Border(1).Padding(2).AlignCenter().Text("EGP").SemiBold().FontSize(8.5f);
+                t.Cell().ColumnSpan(2).Border(1).Padding(2).AlignCenter().Text(FormatDec(cumulativeEGP)).FontSize(8.5f);
             });
         }
 
@@ -591,6 +601,40 @@ public sealed class TranscriptPdfService : ITranscriptPdfService
         {
             var r = Math.Round(v, 2, MidpointRounding.AwayFromZero);
             return r % 1 == 0 ? ((int)r).ToString() : r.ToString("0.##");
+        }
+
+        private decimal CalculateCumulativeCGPA(List<TranscriptSemesterSnapshot> semesters)
+        {
+            if (semesters.Count == 0) return 0;
+            var sumSGPA = semesters.Sum(s => s.SGPA);
+            return sumSGPA / semesters.Count;
+        }
+
+        private decimal CalculateCumulativePercentage(List<TranscriptSemesterSnapshot> semesters)
+        {
+            if (semesters.Count == 0) return 0;
+            var totalCredits = semesters.Sum(s => s.ThCreditsTotal + s.PrCreditsTotal);
+            if (totalCredits == 0) return 0;
+            var sumPercentageWeighted = semesters.Sum(s => s.Percentage * (s.ThCreditsTotal + s.PrCreditsTotal));
+            return sumPercentageWeighted / totalCredits;
+        }
+
+        private decimal CalculateCumulativeEGP(List<TranscriptSemesterSnapshot> semesters)
+        {
+            if (semesters.Count == 0) return 0;
+            return semesters.Sum(s => s.EGP);
+        }
+
+        private string DetermineGrade(decimal percentage)
+        {
+            if (percentage >= 85) return "O";
+            if (percentage >= 75) return "A+";
+            if (percentage >= 65) return "A";
+            if (percentage >= 55) return "B+";
+            if (percentage >= 50) return "B";
+            if (percentage >= 45) return "C";
+            if (percentage >= 40) return "P/S";
+            return "F";
         }
     }
 }

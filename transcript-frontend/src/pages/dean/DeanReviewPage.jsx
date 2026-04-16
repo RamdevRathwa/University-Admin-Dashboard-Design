@@ -60,6 +60,8 @@ export default function DeanReviewPage() {
   const hodRemarks = useMemo(() => pickHodRemarks(review?.approvals), [review?.approvals]);
 
   const canAct = reviewed && !decision && !loading && !error;
+  const headerStatus = decision || review?.request?.status;
+  const showHeaderStatus = !!headerStatus && !/forwarded\s*to\s*dean|forwardedtodean/i.test(String(headerStatus));
 
   const openConfirm = (action) => {
     setError("");
@@ -99,7 +101,7 @@ export default function DeanReviewPage() {
           <p className="text-sm text-gray-500">Dean final approval (read-only review).</p>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge status={decision || review?.request?.status || "ForwardedToDean"} />
+          {showHeaderStatus ? <StatusBadge status={headerStatus} /> : null}
           <Button variant="outline" type="button" onClick={() => navigate("/dean/pending")}>
             Back
           </Button>
