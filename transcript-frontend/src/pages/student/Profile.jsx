@@ -116,7 +116,7 @@ export default function Profile() {
                   {Object.entries(personalInfo).map(([label, value]) => (
                     <div key={label} className="space-y-1">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-                      <p className="text-sm font-medium text-gray-900 break-words">{value}</p>
+                      <p className="text-sm font-medium text-gray-900 wrap-break-word">{value}</p>
                     </div>
                   ))}
                 </div>
@@ -141,7 +141,7 @@ export default function Profile() {
                   {Object.entries(academicInfo).map(([label, value]) => (
                     <div key={label} className="space-y-1">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-                      <p className="text-sm font-medium text-gray-900 break-words">{String(value)}</p>
+                      <p className="text-sm font-medium text-gray-900 wrap-break-word">{String(value)}</p>
                     </div>
                   ))}
                 </div>

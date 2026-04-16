@@ -80,7 +80,7 @@ export default function Downloads() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
-              <Skeleton className="h-5 w-[240px]" />
+              <Skeleton className="h-5 w-60" />
               <Skeleton className="h-4 w-[320px]" />
             </CardHeader>
             <CardContent className="space-y-3">
@@ -90,7 +90,7 @@ export default function Downloads() {
           </Card>
           <Card>
             <CardHeader className="pb-3">
-              <Skeleton className="h-5 w-[240px]" />
+              <Skeleton className="h-5 w-60" />
               <Skeleton className="h-4 w-[320px]" />
             </CardHeader>
             <CardContent className="space-y-3">

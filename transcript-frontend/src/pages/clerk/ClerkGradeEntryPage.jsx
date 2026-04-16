@@ -542,8 +542,8 @@ export default function ClerkGradeEntryPage() {
                       { n: 9, label: "Course Duration:", value: student.courseDuration },
                     ].map((r) => (
                       <tr key={r.n} className="border-t border-gray-200 first:border-t-0">
-                        <td className="w-[44px] px-3 py-2 text-gray-700 tabular-nums">{r.n}</td>
-                        <td className="w-[280px] px-3 py-2 text-gray-800">{r.label}</td>
+                        <td className="w-11 px-3 py-2 text-gray-700 tabular-nums">{r.n}</td>
+                        <td className="w-70 px-3 py-2 text-gray-800">{r.label}</td>
                         <td className="px-3 py-2 font-medium text-gray-900">{r.value || "-"}</td>
                       </tr>
                     ))}
@@ -619,7 +619,7 @@ export default function ClerkGradeEntryPage() {
             </label>
             <textarea
               id="hod-remarks"
-              className="min-h-[96px] w-full rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]/30"
+              className="min-h-24 w-full rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-900 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-[#1e40af]/30"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="Add remarks for HoD (optional)"
