@@ -329,7 +329,7 @@ export default function FacultyManagement() {
               </div>
             </div>
 
-            <div className="max-h-[720px] overflow-y-auto p-4">
+            <div className="max-h-180 overflow-y-auto p-4">
               {loading ? (
                 <div className="space-y-3">
                   {[0, 1, 2].map((item) => (
@@ -356,8 +356,8 @@ export default function FacultyManagement() {
                           key={id}
                           className={`rounded-2xl border p-4 shadow-sm transition ${
                             selected
-                              ? "border-blue-300 bg-gradient-to-br from-blue-50 to-white ring-1 ring-blue-100"
-                              : "border-gray-200 bg-white hover:-translate-y-[1px] hover:border-blue-200 hover:shadow-md"
+                              ? "border-blue-300 bg-linear-to-br from-blue-50 to-white ring-1 ring-blue-100"
+                              : "border-gray-200 bg-white hover:-translate-y-px hover:border-blue-200 hover:shadow-md"
                           }`}
                         >
                           <button type="button" onClick={() => setSelectedFacultyId(id)} className="w-full text-left">
@@ -491,11 +491,11 @@ export default function FacultyManagement() {
                   <Table className="min-w-215">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[140px]">Code</TableHead>
+                        <TableHead className="w-35">Code</TableHead>
                         <TableHead>Department</TableHead>
                         <TableHead className="w-90">HoD Assignment</TableHead>
-                        <TableHead className="w-[120px]">Status</TableHead>
-                        <TableHead className="w-[120px] text-right">Actions</TableHead>
+                        <TableHead className="w-30">Status</TableHead>
+                        <TableHead className="w-30 text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -560,7 +560,7 @@ export default function FacultyManagement() {
       </div>
 
       <Dialog open={openFaculty} onOpenChange={setOpenFaculty}>
-        <DialogContent className="sm:max-w-[560px] rounded-2xl">
+        <DialogContent className="sm:max-w-140 rounded-2xl">
           <DialogHeader>
             <DialogTitle>{facultyForm.id ? "Edit Faculty" : "Add Faculty"}</DialogTitle>
           </DialogHeader>
@@ -587,7 +587,7 @@ export default function FacultyManagement() {
       </Dialog>
 
       <Dialog open={openDept} onOpenChange={setOpenDept}>
-        <DialogContent className="sm:max-w-[620px] rounded-2xl">
+        <DialogContent className="sm:max-w-155 rounded-2xl">
           <DialogHeader>
             <DialogTitle>{deptForm.id ? "Edit Department" : "Add Department"}</DialogTitle>
           </DialogHeader>
