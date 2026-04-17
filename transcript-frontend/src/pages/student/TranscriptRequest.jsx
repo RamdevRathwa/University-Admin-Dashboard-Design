@@ -1041,7 +1041,7 @@ export default function TranscriptRequest() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {steps.map((item, index) => {
               const Icon = item.icon;
               const active = item.key === step;
@@ -1052,7 +1052,7 @@ export default function TranscriptRequest() {
                   key={item.key}
                   type="button"
                   onClick={() => setStep(item.key)}
-                  className={`rounded-2xl border p-4 text-left transition ${
+                  className={`rounded-2xl border p-3 text-left transition ${
                     active
                       ? "border-[#1e40af] bg-blue-50 shadow-sm"
                       : "border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
@@ -1061,21 +1061,21 @@ export default function TranscriptRequest() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{item.title}</p>
-                      <p className="mt-1 text-sm font-semibold text-gray-900">{item.label}</p>
+                      <p className="mt-1 text-[15px] font-semibold text-gray-900 leading-5">{item.label}</p>
                     </div>
                     <div className={`rounded-full p-2 ${active ? "bg-[#1e40af] text-white" : "bg-gray-100 text-gray-600"}`}>
                       <Icon className="h-4 w-4" />
                     </div>
                   </div>
-                  <p className="mt-2 text-sm text-gray-600">{item.description}</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm">
+                  <p className="mt-2 text-xs text-gray-600 leading-5">{item.description}</p>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs">
                       {completed ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Circle className="h-4 w-4 text-gray-400" />}
                       <span className={completed ? "text-green-700" : "text-gray-500"}>
                         {completed ? "Completed" : `${item.percent}% complete`}
                       </span>
                     </div>
-                    <span className="text-sm font-semibold text-gray-900">{item.percent}%</span>
+                    <span className="text-xs font-semibold text-gray-900">{item.percent}%</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
                     <div

@@ -20,6 +20,16 @@ public sealed class AdminRepository : IAdminRepository
 
     public async Task<AdminDashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken ct = default)
     {
+        var pendingRequestStatuses = new[]
+        {
+            "Submitted",
+            "GradeEntry",
+            "ForwardedToHoD",
+            "ForwardedToDean",
+            "ReturnedToClerk",
+            "ReturnedToHoD"
+        };
+
         var activeUsers = _db.Users.AsNoTracking().Where(u => u.DeletedAt == null);
 
         var userIds = await activeUsers.Select(u => u.UserId).ToListAsync(ct);
@@ -33,7 +43,13 @@ public sealed class AdminRepository : IAdminRepository
         var totalStaff = roles.Count - totalStudents;
 
         var approvedTranscripts = await _db.Transcripts.AsNoTracking().CountAsync(t => (t.IsLocked ?? false), ct);
-        var pendingTranscripts = await _db.Transcripts.AsNoTracking().CountAsync(t => (t.IsLocked ?? false) && t.PublishedAt == null, ct);
+        var pendingTranscripts = await (
+            from req in _db.TranscriptRequests.AsNoTracking()
+            join st in _db.TranscriptStatuses.AsNoTracking() on req.StatusId equals st.StatusId
+            where pendingRequestStatuses.Contains(st.StatusCode)
+            where !_db.Transcripts.AsNoTracking().Any(t => t.TranscriptRequestId == req.TranscriptRequestId && (t.IsLocked ?? false))
+            select req.TranscriptRequestId
+        ).Distinct().CountAsync(ct);
 
         var totalFaculties = await _db.Faculties.AsNoTracking().CountAsync(ct);
         var totalDepartments = await _db.Departments.AsNoTracking().CountAsync(ct);
